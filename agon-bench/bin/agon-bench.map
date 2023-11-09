@@ -5,9 +5,9 @@ Section     Base   Top    High   Length
 .fini       04006B 0400F3            88h
 .init.args  0400F3 0400F3             0h
 .init.bss   0400F3 0400FF             Ch
-.text       0400FF 0428FE          27FFh
-.data       0428FE 04291A            1Ch
-.rodata     04291A 042AF3           1D9h
+.text       0400FF 042A61          2962h
+.data       042A61 042A7D            1Ch
+.rodata     042A7D 042CA9           22Ch
 .init_array 000000 000000             0h
 .ctors      000000 000000             0h
 .dtors      000000 000000             0h
@@ -68,35 +68,36 @@ __llsub                = 0406DA
 __lshrs.hijack_lshru   = 040708
 __lshru                = 040717
 _vdp_load_bitmap       = 040727
-_vdu_load_bitmap       = 0428FE
+_vdu_load_bitmap       = 042A61
 __stdio_init           = 0407CF
-_stdin                 = 042905
-_stdout                = 04290A
-_stderr                = 04290F
+_stdin                 = 042A68
+_stdout                = 042A6D
+_stderr                = 042A72
 _fputc                 = 040821
 _fput_char             = 0408B1
 _free                  = 0408D8
 __alloc_base           = 060000
 _npf_vpprintf          = 040995
-JTI0_0                 = 04291A
-JTI0_1                 = 042938
-JTI0_2                 = 04297D
-JTI0_3                 = 04299E
-JTI0_4                 = 0429B6
-JTI0_5                 = 0429CE
+JTI0_0                 = 042A7D
+JTI0_1                 = 042A9B
+JTI0_2                 = 042AE0
+JTI0_3                 = 042B01
+JTI0_4                 = 042B19
+JTI0_5                 = 042B31
 _npf_utoa_rev          = 0420FF
 _printf                = 0421C7
 _vprintf               = 0421E6
 _npf_putc_std          = 042206
-_.str                  = 0429E6
-_.str.1                = 0429EA
-_.str.2                = 0429EE
+_.str                  = 042B49
+_.str.1                = 042B4D
+_.str.2                = 042B51
 _outchar               = 042216
 _putchar               = 04221D
 _puts                  = 04224C
-___null_literal_str    = 0429F2
-___end_of_line_str     = 0429F9
-__sbrkbase             = 042914
+___null_literal_str    = 042B55
+___end_of_line_str     = 042B5C
+__sbrkbase             = 042A77
+_putch                 = 042278
 _mos_puts              = 042290
 _mos_fputc             = 04251B
 _mos_setintvector      = 0425A8
@@ -104,14 +105,16 @@ __start                = 040045
 skip._abort            = 0400A5
 _exit.sp               = 0400A6
 _clear_bss             = 0400F3
-exit_functions         = 042917
+exit_functions         = 042A7A
 _on_vblank             = 04266F
 _main                  = 042691
 _count                 = 060006
-_.str.2                = 0429FB
-_.str.3                = 042A32
-_.str.4                = 042A6D
-_.str.5                = 042A8F
-_str                   = 042AD2
-_str.6                 = 042AE2
-_vblank_handler        = 0428DD
+_.str.2                = 042B5E
+_.str.3                = 042B95
+_.str.4                = 042BD0
+_.str.5                = 042BF2
+_.str.6                = 042C35
+_str                   = 042C88
+_str.7                 = 042C98
+_fast_vdu              = 0429A9
+_vblank_handler        = 042A40

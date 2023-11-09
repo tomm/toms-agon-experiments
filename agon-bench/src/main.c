@@ -9,6 +9,7 @@ volatile int32_t count = 0;
 
 // vblank.asm
 extern void vblank_handler();
+extern void fast_vdu(uint8_t *data, int len);
 
 // called from vblank_handler
 void on_vblank()
@@ -32,9 +33,21 @@ void on_vblank()
 	        "\tpop af\n"
 
 int main() {
-	printf("Agon Bench 1.01\n");
+	printf("Agon Bench 1.02\n");
 	printf("===============\n\n");
 	vblank_handler_t old_handler = mos_setintvector(0x32, &vblank_handler);
+
+	/*
+	fast_vdu("", 0);
+	fast_vdu("abcdefghijklmnopqrstuvwxyz", 15);
+	fast_vdu("\r\n", 2);
+	fast_vdu("abcdefghijklmnopqrstuvwxyz", 16);
+	fast_vdu("\r\n", 2);
+	fast_vdu("abcdefghijklmnopqrstuvwxyz", 17);
+	fast_vdu("\r\n", 2);
+	fast_vdu("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", 52);
+	fast_vdu("\r\n", 2);
+	*/
 
 	{
 		for (count=-1; count; ) {} // clear counter and let current frame finish
@@ -74,7 +87,19 @@ int main() {
 		float elapsed = (float)count / 60.0f;
 		printf("%.2f seconds to upload 64KiB to VDP (%.2f KiB/sec, %.2f KBit/sec)\n", elapsed, 64.0f / elapsed, 8.0f*64.0f / elapsed);
 	}
+	{
+		for (count=-1; count; ) {} // clear counter and let current frame finish
+		// load 64KiB of junk into the vdp
+		putch(23); putch(27); putch(1);
+		putch(128); putch(0);
+		putch(128); putch(0);
+		fast_vdu((uint8_t*)0x40000, 65536);
+		float elapsed = (float)count / 60.0f;
+		printf("%.2f seconds to upload 64KiB to VDP with fast_vdu() (%.2f KiB/sec, %.2f KBit/sec)\n", elapsed, 64.0f / elapsed, 8.0f*64.0f / elapsed);
+	}
+	
 	
 	mos_setintvector(0x32, old_handler);
+
 	return 0;
 }

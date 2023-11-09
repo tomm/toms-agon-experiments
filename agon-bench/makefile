@@ -6,8 +6,6 @@ NAME = agon-bench
 DESCRIPTION = "Agon Bench"
 COMPRESSED = NO
 
-EXTRA_ASM_SOURCES = src/vblank.asm
-
 CFLAGS = -Wall -Wextra -Oz
 CXXFLAGS = -Wall -Wextra -Oz
 
