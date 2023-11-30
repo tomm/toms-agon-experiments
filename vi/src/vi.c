@@ -19,7 +19,8 @@
 
 #define ENABLE_FEATURE_VI_SEARCH 1
 #define ENABLE_FEATURE_VI_YANKMARK 1
-//#define ENABLE_FEATURE_VI_UNDO 1
+#define ENABLE_FEATURE_VI_DOT_CMD 1
+#define ENABLE_FEATURE_VI_UNDO 1
 //#define ENABLE_FEATURE_VI_UNDO_QUEUE 1
 //#define CONFIG_FEATURE_VI_UNDO_QUEUE_MAX 10
 //config:config VI
@@ -593,6 +594,25 @@ static void show_help(void)
 	"\n\tAdapt to window re-sizes"
 #endif
 	);
+}
+
+/**
+ * Like sprintf, but malloc a buffer of the required length.
+ */
+static char *asprintf(const char *format, ...) __attribute__((format(printf, 1, 2)));
+static char *asprintf(const char *format, ...)
+{
+	va_list ap;
+	va_start(ap, format);
+	size_t len = vsnprintf(NULL, 0, format, ap);
+	va_end(ap);
+
+	char *buf = (char*)malloc(len+1);
+	va_start(ap, format);
+	vsnprintf(buf, len+1, format, ap);
+	va_end(ap);
+
+	return buf;
 }
 
 static void write1(const char *out)
@@ -2721,7 +2741,7 @@ static char *expand_args(char *args)
 		}
 
 		*s = '\0';
-		t = xasprintf("%s%s%s", args, replace, s+1);
+		t = asprintf("%s%s%s", args, replace, s+1);
 		s = t + (s - args) + strlen(replace);
 		free(args);
 		args = t;
@@ -4036,7 +4056,7 @@ static void do_cmd(int c)
 			if (cmdcnt)	// update saved count if current count is non-zero
 				dotcnt = cmdcnt;
 			last_modifying_cmd[lmc_len] = '\0';
-			ioq = ioq_start = xasprintf("%u%s", dotcnt, last_modifying_cmd);
+			ioq = ioq_start = asprintf("%u%s", dotcnt, last_modifying_cmd);
 		}
 		break;
 #endif

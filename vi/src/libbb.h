@@ -5,6 +5,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
+#include <stddef.h>
 #include <mos_api.h>
 
 #define ALWAYS_INLINE inline
@@ -19,6 +20,7 @@ typedef int smallint;
 #define xstrdup(p) strdup(p)
 #define xzalloc(s) calloc(s,1)
 #define ARRAY_SIZE(x) ((unsigned)(sizeof(x) / sizeof((x)[0])))
+#define ALIGN1
 
 #define KEYCODE_DOWN 0x81
 #define KEYCODE_LEFT 0x82
