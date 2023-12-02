@@ -21,8 +21,10 @@
 #define ENABLE_FEATURE_VI_YANKMARK 1
 #define ENABLE_FEATURE_VI_DOT_CMD 1
 #define ENABLE_FEATURE_VI_UNDO 1
+//#define ENABLE_FEATURE_VI_COLON 1
 //#define ENABLE_FEATURE_VI_UNDO_QUEUE 1
 //#define CONFIG_FEATURE_VI_UNDO_QUEUE_MAX 10
+
 //config:config VI
 //config:	bool "vi (23 kb)"
 //config:	default y
