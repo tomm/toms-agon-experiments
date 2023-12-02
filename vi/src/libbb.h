@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <ctype.h>
 #include <stddef.h>
+#include <stdbool.h>
 #include <mos_api.h>
 
 #define ALWAYS_INLINE inline

@@ -17,11 +17,13 @@
 //	":r !cmd"  and  "!cmd"  to filter text through an external command
 //	An "ex" line oriented mode- maybe using "cmdedit"
 
+#define VI_VER "Agon VI is based on Busybox VI"
+
 #define ENABLE_FEATURE_VI_SEARCH 1
 #define ENABLE_FEATURE_VI_YANKMARK 1
 #define ENABLE_FEATURE_VI_DOT_CMD 1
 #define ENABLE_FEATURE_VI_UNDO 1
-//#define ENABLE_FEATURE_VI_COLON 1
+#define ENABLE_FEATURE_VI_COLON 1
 //#define ENABLE_FEATURE_VI_UNDO_QUEUE 1
 //#define CONFIG_FEATURE_VI_UNDO_QUEUE_MAX 10
 
@@ -287,6 +289,11 @@ enum {
 	C_END = -1,	// cursor is at end of line due to '$' command
 };
 
+typedef struct llist_t {
+	struct llist_t *link;
+	char *data;
+} llist_t;
+
 
 // vi.c expects chars to be unsigned.
 // busybox build system provides that, but it's better
@@ -550,7 +557,7 @@ struct globals *ptr_to_globals = &_globals;
 	SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); \
 	last_modified_count--; \
 	/* "" but has space for 2 chars: */ \
-	IF_FEATURE_VI_SEARCH(last_search_pattern = xzalloc(2);) \
+	last_search_pattern = xzalloc(2); \
 	tabstop = 8; \
 	IF_FEATURE_VI_SETOPTS(newindent--;) \
 } while (0)
@@ -598,6 +605,28 @@ static void show_help(void)
 	);
 }
 
+void* llist_pop(llist_t **head)
+{
+	void *data = NULL;
+	llist_t *temp = *head;
+
+	if (temp) {
+		data = temp->data;
+		*head = temp->link;
+		free(temp);
+	}
+	return data;
+}
+
+void llist_add_to(llist_t **old_head, void *data)
+{
+	llist_t *new_head = malloc(sizeof(llist_t));
+
+	new_head->data = data;
+	new_head->link = *old_head;
+	*old_head = new_head;
+}
+
 /**
  * Like sprintf, but malloc a buffer of the required length.
  */
@@ -615,6 +644,19 @@ static char *asprintf(const char *format, ...)
 	va_end(ap);
 
 	return buf;
+}
+
+// like strchr() except that if c is not found in s, then it returns a pointer to the null byte at the end of s, rather than NULL
+char *strchrnul(const char *s, int c) {
+	const char *res = strchr(s, c);
+	return res ? res : s[strlen(s)];
+}
+
+static inline bool file_exists(const char *filename) {
+	FILE *f = fopen(filename, "r");
+	if (f == NULL) return false;
+	fclose(f);
+	return true;
 }
 
 static void write1(const char *out)
@@ -2531,7 +2573,7 @@ static char *get_one_address(char *p, int *result, int *valid)
 # if ENABLE_FEATURE_VI_YANKMARK || ENABLE_FEATURE_VI_SEARCH
 	char *q, c;
 # endif
-	IF_FEATURE_VI_SEARCH(int dir;)
+	int dir;
 
 	got_addr = FALSE;
 	addr = count_lines(text, dot);	// default to current line
@@ -2578,7 +2620,7 @@ static char *get_one_address(char *p, int *result, int *valid)
 			if (p + 1 != q) {
 				// save copy of new pattern
 				free(last_search_pattern);
-				last_search_pattern = xstrndup(p, q - p);
+				last_search_pattern = strndup(p, q - p);
 			}
 			p = q;
 			if (*p == c)
@@ -3046,13 +3088,13 @@ static void colon(char *buf)
 		// how many lines in text[]?
 		li = count_lines(text, end - 1);
 		status_line("'%s'%s"
-			IF_FEATURE_VI_READONLY("%s")
+			//IF_FEATURE_VI_READONLY("%s")
 			" %uL, %uC",
 			fn,
 			(size < 0 ? " [New file]" : ""),
-			IF_FEATURE_VI_READONLY(
+			/*IF_FEATURE_VI_READONLY(
 				((readonly_mode) ? " [Readonly]" : ""),
-			)
+			)*/
 			li, (int)(end - text)
 		);
 	} else if (strncmp(cmd, "file", i) == 0) {	// what File is this
@@ -3179,10 +3221,10 @@ static void colon(char *buf)
 		// how many lines in text[]?
 		li = count_lines(q, q + size - 1);
 		status_line("'%s'"
-			IF_FEATURE_VI_READONLY("%s")
+			//IF_FEATURE_VI_READONLY("%s")
 			" %uL, %uC",
 			fn,
-			IF_FEATURE_VI_READONLY((readonly_mode ? " [Readonly]" : ""),)
+			//IF_FEATURE_VI_READONLY((readonly_mode ? " [Readonly]" : ""),)
 			li, size
 		);
 		dot = find_line(num);
@@ -3376,7 +3418,7 @@ static void colon(char *buf)
 #  endif
 # endif /* FEATURE_VI_SEARCH */
 	} else if (strncmp(cmd, "version", i) == 0) {  // show software version
-		status_line(BB_VER);
+		status_line(VI_VER);
 	} else if (strncmp(cmd, "write", i) == 0  // write text to file
 	        || strcmp(cmd, "wq") == 0
 	        || strcmp(cmd, "wn") == 0
@@ -3387,13 +3429,11 @@ static void colon(char *buf)
 
 		// is there a file name to write to?
 		if (args[0]) {
-			struct stat statbuf;
-
 			exp = expand_args(args);
 			if (exp == NULL)
 				goto ret;
 			if (!useforce && (fn == NULL || strcmp(fn, exp) != 0) &&
-					stat(exp, &statbuf) == 0) {
+					file_exists(exp)) {
 				status_line_bold("File exists (:w! overrides)");
 				goto ret;
 			}
@@ -5021,6 +5061,13 @@ int main(int argc, char **argv)
 	// 0: all of our options are disabled by default in vim
 	//vi_setops = 0;
 	//opts = getopt32(argv, VI_OPTSTR IF_FEATURE_VI_COLON(, &initial_cmds));
+	int num_initial_cmds = 0;
+	for (int i=1; i<argc; i++) {
+		if (argv[i][0] == '+') {
+			llist_add_to(&initial_cmds, argv[i]);
+			num_initial_cmds++;
+		}
+	}
 
 #if 0
 	if (opts & OPT_H)
@@ -5031,38 +5078,34 @@ int main(int argc, char **argv)
 	}
 #endif
 
-	argv += optind;
-	cmdline_filecnt = argc - optind;
+	argv += 1;
+	cmdline_filecnt = argc - num_initial_cmds - 1;
 
 	//  1-  process EXINIT variable from environment
 	//  2-  if EXINIT is unset process $HOME/.exrc file
 	//  3-  process command line args
 #if ENABLE_FEATURE_VI_COLON
+#if 0
 	{
-		const char *exinit = getenv("EXINIT");
 		char *cmds = NULL;
 
-		if (exinit) {
-			cmds = xstrdup(exinit);
-		} else {
-			const char *home = getenv("HOME");
+		const char *home = getenv("HOME");
 
-			if (home && *home) {
-				char *exrc = concat_path_file(home, ".exrc");
-				struct stat st;
+		if (home && *home) {
+			char *exrc = concat_path_file(home, ".exrc");
+			struct stat st;
 
-				// .exrc must belong to and only be writable by user
-				if (stat(exrc, &st) == 0) {
-					if ((st.st_mode & (S_IWGRP|S_IWOTH)) == 0
-					 && st.st_uid == getuid()
-					) {
-						cmds = xmalloc_open_read_close(exrc, NULL);
-					} else {
-						status_line_bold(".exrc: permission denied");
-					}
+			// .exrc must belong to and only be writable by user
+			if (stat(exrc, &st) == 0) {
+				if ((st.st_mode & (S_IWGRP|S_IWOTH)) == 0
+				 && st.st_uid == getuid()
+				) {
+					cmds = xmalloc_open_read_close(exrc, NULL);
+				} else {
+					status_line_bold(".exrc: permission denied");
 				}
-				free(exrc);
 			}
+			free(exrc);
 		}
 
 		if (cmds) {
@@ -5071,6 +5114,7 @@ int main(int argc, char **argv)
 			free(cmds);
 		}
 	}
+#endif /* 0 */
 #endif
 	// "Save cursor, use alternate screen buffer, clear screen"
 	//write1(ESC"[?1049h");
