@@ -5,6 +5,18 @@
  *
  * Licensed under GPLv2 or later, see file LICENSE in this source tree.
  */
+
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#include <ctype.h>
+#include <stddef.h>
+#include <stdbool.h>
+#include "vi-agon.h"
+#if ENABLE_FEATURE_VI_REGEX_SEARCH
+# include <regex.h>
+#endif
+
 //
 //Things To Do:
 //	./.exrc
@@ -17,15 +29,11 @@
 //	":r !cmd"  and  "!cmd"  to filter text through an external command
 //	An "ex" line oriented mode- maybe using "cmdedit"
 
-#define VI_VER "Agon VI is based on Busybox VI"
-
-#define ENABLE_FEATURE_VI_SEARCH 1
-#define ENABLE_FEATURE_VI_YANKMARK 1
-#define ENABLE_FEATURE_VI_DOT_CMD 1
-#define ENABLE_FEATURE_VI_UNDO 1
-#define ENABLE_FEATURE_VI_COLON 1
-//#define ENABLE_FEATURE_VI_UNDO_QUEUE 1
-//#define CONFIG_FEATURE_VI_UNDO_QUEUE_MAX 10
+#define FALSE 0
+#define TRUE 1
+#define xzalloc(s) calloc(s,1)
+#define ARRAY_SIZE(x) ((unsigned)(sizeof(x) / sizeof((x)[0])))
+#define ALIGN1
 
 //config:config VI
 //config:	bool "vi (23 kb)"
@@ -204,11 +212,15 @@
 // note: non-standard, "vim -H" is Hebrew mode (bidi support)
 // 
 
-#include "libbb.h"
-// Should be after libbb.h: on some systems regex.h needs sys/types.h:
-#if ENABLE_FEATURE_VI_REGEX_SEARCH
-# include <regex.h>
-#endif
+// unistd.h, getopt.h stuff
+char *optarg;
+int optind = 1, opterr, optopt;
+
+#define KEYCODE_BUFFER_SIZE 16
+#define CONFIG_FEATURE_VI_MAX_LEN 4096
+#define STRERROR_FMT    "%s"
+#define STRERROR_ERRNO
+typedef int smallint;
 
 // the CRASHME code is unmaintained, and doesn't currently build
 #define ENABLE_FEATURE_VI_CRASHME 0
@@ -268,6 +280,22 @@ enum {
 // cmds modifying text[]
 static const char modifying_cmds[] ALIGN1 = "aAcCdDiIJoOpPrRs""xX<>~";
 #endif
+
+static void* memrchr(const void *s, int c, size_t n)
+{
+	const char *start = s, *end = s;
+
+	end += n - 1;
+
+	while (end >= start) {
+		if (*end == (char)c)
+			return (void *) end;
+		end--;
+	}
+
+	return NULL;
+}
+
 
 enum {
 	YANKONLY = FALSE,
@@ -566,9 +594,6 @@ struct globals *ptr_to_globals = &_globals;
 static int crashme = 0;
 #endif
 
-/// XXX TODO
-extern void* memrchr(const void *s, int c, size_t n);
-
 static void show_status_line(void);	// put a message on the bottom line
 static void status_line_bold(const char *, ...);
 
@@ -676,7 +701,7 @@ static int query_screen_dimensions(void)
 	return err;
 }
 #else
-static ALWAYS_INLINE int query_screen_dimensions(void)
+static int query_screen_dimensions(void)
 {
 	return 0;
 }
@@ -1183,36 +1208,7 @@ static void indicate_error(void)
 	}
 }
 
-// XXX TODO
-int safe_read_key(char *buffer, int timeout)
-{
-	return getch();
-}
-
 //----- IO Routines --------------------------------------------
-static int readit(void) // read (maybe cursor) key from stdin
-{
-	return safe_read_key(readbuffer, /*timeout:*/ -1);
-#if 0
-	int c;
-
-	//fflush_all();
-
-	// Wait for input. TIMEOUT = -1 makes read_key wait even
-	// on nonblocking stdin.
-	// Note: read_key sets errno to 0 on success.
- again:
-	c = safe_read_key(STDIN_FILENO, readbuffer, /*timeout:*/ -1);
-	if (c == -1) { // EOF/error
-		if (errno == EAGAIN) // paranoia
-			goto again;
-		go_bottom_and_clear_to_eol();
-		cookmode(); // terminal to "cooked"
-		bb_simple_error_msg_and_die("can't read user input");
-	}
-	return c;
-#endif
-}
 
 #if ENABLE_FEATURE_VI_DOT_CMD
 static int get_one_char(void)
@@ -1235,10 +1231,10 @@ static int get_one_char(void)
 			ioq_start = NULL;
 			// read from STDIN:
 		}
-		return readit();
+		return read_key();
 	}
 	// we are adding STDIN chars to q.
-	c = readit();
+	c = read_key();
 	if (lmc_len >= ARRAY_SIZE(last_modifying_cmd) - 2) {
 		// last_modifying_cmd[] is too small, can't remember the cmd
 		// - drop it
@@ -1250,7 +1246,7 @@ static int get_one_char(void)
 	return c;
 }
 #else
-# define get_one_char() readit()
+# define get_one_char() read_key()
 #endif
 
 // Get type of thing to operate on and adjust count
@@ -2356,7 +2352,7 @@ static char *char_insert(char *p, char c, int undo) // insert the char c at 'p'
 #if ENABLE_FEATURE_VI_COLON_EXPAND
 static void init_filename(char *fn)
 {
-	char *copy = xstrdup(fn);
+	char *copy = strdup(fn);
 
 	if (current_filename == NULL) {
 		current_filename = copy;
@@ -2378,12 +2374,12 @@ static void update_filename(char *fn)
 	if (current_filename == NULL || strcmp(fn, current_filename) != 0) {
 		free(alt_filename);
 		alt_filename = current_filename;
-		current_filename = xstrdup(fn);
+		current_filename = strdup(fn);
 	}
 #else
 	if (fn != current_filename) {
 		free(current_filename);
-		current_filename = xstrdup(fn);
+		current_filename = strdup(fn);
 	}
 #endif
 }
@@ -2764,7 +2760,7 @@ static char *expand_args(char *args)
 	char *s, *t;
 	const char *replace;
 
-	args = xstrdup(args);
+	args = strdup(args);
 	for (s = args; *s; s++) {
 		if (*s == '%') {
 			replace = current_filename;
@@ -3314,7 +3310,7 @@ static void colon(char *buf)
 
 		if (len_F) {	// save "find" as last search pattern
 			free(last_search_pattern);
-			last_search_pattern = xstrdup(F - 1);
+			last_search_pattern = strdup(F - 1);
 			last_search_pattern[0] = '/';
 		} else if (last_search_pattern[1] == '\0') {
 			status_line_bold("No previous search");
@@ -4119,7 +4115,7 @@ static void do_cmd(int c)
 				last_search_pattern[0] = c;
 		} else {	// strlen(q) > 1: new pat- save it and find
 			free(last_search_pattern);
-			last_search_pattern = xstrdup(q);
+			last_search_pattern = strdup(q);
 		}
 		// fall through
 	case 'n':			// n- repeat search for last pattern
@@ -5036,9 +5032,12 @@ int main(int argc, char **argv)
 {
 	int opts;
 
-	// XXX
-	//INIT_G();
+	memset(&_globals, 0, sizeof(struct globals));
+	last_modified_count--;
+	/* "" but has space for 2 chars: */
+	last_search_pattern = xzalloc(2);
 	tabstop = 8;
+	//IF_FEATURE_VI_SETOPTS(newindent--;)
 
 #if ENABLE_FEATURE_VI_UNDO
 	//undo_stack_tail = NULL; - already is
