@@ -31,13 +31,14 @@ uart0_fast_write: ; hl=data, bc=len
 	ld hl,-16
 	or a
 	adc hl,bc
-	jr nc,.write_lt_16
+	jp nc,.write_lt_16
 
 	; write 16 bytes
 	push hl
 	pop bc ; bc -= 16
 	pop hl ; restore hl (data)
 
+	call .waitcts
 	; wait for uart0 fifo to be empty
 	; fifo is 16 bytes long, so we can write all 16 bytes without waiting
 .not_ready:
@@ -45,76 +46,21 @@ uart0_fast_write: ; hl=data, bc=len
 	and 0x60      ; either TEMT or THRE (fifo empty, but transmit shift register can be active)
 	jr z, .not_ready
 
+	push bc
 	; fill the uart0 fifo with 16 bytes
+	ld b,16
+.fifo_fill:
 	ld a, (hl)
 	inc hl
 	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	ld a, (hl)
-	inc hl
-	out0 (0xc0), a
-
-	jr uart0_fast_write
+	djnz .fifo_fill
+	pop bc
+	jp uart0_fast_write
 	
 	; write the final <16 bytee
 .write_lt_16:
 	pop hl
+	call .waitcts
 
 .not_ready2: ; wait for uart0 fifo to be empty
 	in0 a,(0xc5)  ; UART0_LSR
@@ -124,12 +70,15 @@ uart0_fast_write: ; hl=data, bc=len
 	ld b, c ; len fits in 8 bits now (is <16)
 	ld a, b
 	or a
-	jr z, .done
+	ret z
 
 .loop_lt_16:
 	ld a, (hl)
 	inc hl
 	out0 (0xc0), a
 	djnz .loop_lt_16
-.done:
+.waitcts:
+	in0 a,(0xa2)
+	tst a,8
+	jr nz,.waitcts
 	ret

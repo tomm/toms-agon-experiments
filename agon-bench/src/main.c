@@ -33,21 +33,9 @@ void on_vblank()
 	        "\tpop af\n"
 
 int main() {
-	printf("Agon Bench 1.02\n");
+	printf("Agon Bench 1.03\n");
 	printf("===============\n\n");
 	vblank_handler_t old_handler = mos_setintvector(0x32, &vblank_handler);
-
-	/*
-	fast_vdu("", 0);
-	fast_vdu("abcdefghijklmnopqrstuvwxyz", 15);
-	fast_vdu("\r\n", 2);
-	fast_vdu("abcdefghijklmnopqrstuvwxyz", 16);
-	fast_vdu("\r\n", 2);
-	fast_vdu("abcdefghijklmnopqrstuvwxyz", 17);
-	fast_vdu("\r\n", 2);
-	fast_vdu("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ", 52);
-	fast_vdu("\r\n", 2);
-	*/
 
 	{
 		for (count=-1; count; ) {} // clear counter and let current frame finish
