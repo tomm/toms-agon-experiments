@@ -18,3 +18,10 @@ Agon RAM. This means that vi can only be run from a MOS prompt, not from within
 another program such as BASIC (via star commands).
 
 Agon Vi is based on Busybox Vi.
+
+## New features of Agon Vi
+
+Dos (CRLF) or Unix (LF) line endings can be chosen with these commands:
+
+`:set ff=dos`
+`:set ff=unix`

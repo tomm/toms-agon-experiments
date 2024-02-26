@@ -332,6 +332,7 @@ struct globals {
 	char *text, *end;       // pointers to the user data in memory
 	char *dot;              // where all the action takes place
 	int text_size;		// size of the allocated buffer
+	bool is_crlf;
 
 	// the rest
 #if ENABLE_FEATURE_VI_SETOPTS
@@ -510,6 +511,7 @@ struct globals *ptr_to_globals = &_globals;
 #define end            (G.end           )
 #define dot            (G.dot           )
 #define reg            (G.reg           )
+#define is_crlf        (G.is_crlf       )
 
 #define vi_setops               (G.vi_setops          )
 #define editing                 (G.editing            )
@@ -1363,15 +1365,16 @@ static int format_edit_status(void)
 
 	ret = snprintf(status_buffer, trunc_at+1,
 #if ENABLE_FEATURE_VI_READONLY
-		"%c %s%s%s %d/%d %d%%",
+		"%c %s%s%s%s %d/%d %d%%",
 #else
-		"%c %s%s %d/%d %d%%",
+		"%c %s%s%s %d/%d %d%%",
 #endif
 		cmd_mode_indicator[cmd_mode & 3],
 		(current_filename != NULL ? current_filename : "No file"),
 #if ENABLE_FEATURE_VI_READONLY
 		(readonly_mode ? " [Readonly]" : ""),
 #endif
+		(is_crlf ? " [DOS]" : " [UNIX]"),
 		(modified_count ? " [Modified]" : ""),
 		cur, tot, percent);
 
@@ -2384,6 +2387,35 @@ static void update_filename(char *fn)
 #endif
 }
 
+static void detect_crlf()
+{
+	is_crlf = false;
+
+	for (char *c = text; c < end; c++) {
+		if (*c == '\r' && c < end-1 && *(c+1) == '\n') {
+			is_crlf = true;
+			break;
+		}
+		if (*c == '\n') break;
+	}
+
+	if (is_crlf) {
+		// strip out '\r'. it's only added back on save
+		char *wr = text;
+		const char *rd = text;
+		while (rd < end) {
+			if (*rd == '\r') rd++;
+
+			if (rd < end) {
+				*wr = *rd;
+			}
+			rd++;
+			wr++;
+		}
+		end = wr;
+	}
+}
+
 // read text from file or create an empty buf
 // will also update current_filename
 static int init_text_buffer(char *fn)
@@ -2401,7 +2433,7 @@ static int init_text_buffer(char *fn)
 		// file doesnt exist. Start empty buf with dummy line
 		char_insert(text, '\n', NO_UNDO);
 	}
-
+	detect_crlf();
 	flush_undo_data();
 	modified_count = 0;
 	last_modified_count = -1;
@@ -2436,6 +2468,22 @@ static uintptr_t string_insert(char *p, const char *s, int undo) // insert the s
 }
 #endif
 
+static void fwrite_crlf(char *buf, int len, FILE *f)
+{
+	static const char *crlf = "\r\n";
+	char *lstart = buf;
+	int llen = 0;
+	while (lstart < buf + len) {
+		// XXX known bug: a DOS text file with no final \r\n will be saved with
+		// a final \r\n added (due to second clause in while condition)
+		while (*(lstart + llen) != '\n' && (lstart + llen < buf + len)) llen++;
+		fwrite(lstart, 1, llen, f);
+		fwrite(crlf, 1, 2, f);
+		lstart += llen + 1;
+		llen = 0;
+	}
+}
+
 static int file_write(char *fn, char *first, char *last)
 {
 	int cnt, charcnt;
@@ -2452,7 +2500,11 @@ static int file_write(char *fn, char *first, char *last)
 	if (f == NULL)
 		return -1;
 	cnt = last - first + 1;
-	fwrite(first, 1, cnt, f);
+	if (is_crlf) {
+		fwrite_crlf(first, cnt, f);
+	} else {
+		fwrite(first, 1, cnt, f);
+	}
 	fclose(f);
 	return cnt;
 }
@@ -3231,6 +3283,14 @@ static void colon(char *buf)
 			// reset the filenames to edit
 			optind = -1; // start from 0th file
 			editing = 0;
+		}
+	} else if (strncmp(cmd, "set", i) == 0) {	// set or clear features
+		if (strcmp(args, "ff=dos") == 0) {
+			is_crlf = true;
+		} else if (strcmp(args, "ff=unix") == 0) {
+			is_crlf = false;
+		} else {
+			status_line_bold("Valid arguments: set ff=dos, set ff=unix");
 		}
 # if ENABLE_FEATURE_VI_SET
 	} else if (strncmp(cmd, "set", i) == 0) {	// set or clear features
