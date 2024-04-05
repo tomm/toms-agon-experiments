@@ -1289,7 +1289,12 @@ static char *get_input_line(const char *prompt)
 	i = strlen(buf);
 	while (i < MAX_INPUT_LEN - 1) {
 		c = get_one_char();
-		if (c == '\n' || c == '\r' || c == 27)
+		if (c == 27) {
+			// cancel
+			buf[0] = 0;
+			break;
+		}
+		if (c == '\n' || c == '\r')
 			break;		// this is end of input
 		if (isbackspace(c)) {
 			// user wants to erase prev char
