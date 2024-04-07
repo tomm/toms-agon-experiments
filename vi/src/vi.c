@@ -3,6 +3,9 @@
  * tiny vi.c: A small 'vi' clone
  * Copyright (C) 2000, 2001 Sterling Huxley <sterling@europa.com>
  *
+ * Agon port and subsequent changes:
+ * Copyright (C) 2023, 2024 Tom Morton
+ *
  * Licensed under GPLv2 or later, see file LICENSE in this source tree.
  */
 
