@@ -10,11 +10,22 @@ volatile int32_t count = 0;
 // vblank.asm
 extern void vblank_handler();
 extern void fast_vdu(uint8_t *data, int len);
+// misc.asm
+extern uint8_t getsysvar_gp(void);
+extern void delay_1sec(void);
 
 // called from vblank_handler
 void on_vblank()
 {
 	count++;
+}
+
+static void vdu_gp(uint8_t msg)
+{
+	putch(23); // Send a general poll packet
+	putch(0);
+	putch(0x80);
+	putch(msg);
 }
 
 #define AGON_CLK 18.432f
@@ -33,28 +44,21 @@ void on_vblank()
 	        "\tpop af\n"
 
 int main() {
-	printf("Agon Bench 1.03\n");
+	// mode 0: make sure we have a 60hz mode for timing
+	putch(22); putch(0);
+
+	printf("Agon Bench 1.04\n");
 	printf("===============\n\n");
 	vblank_handler_t old_handler = mos_setintvector(0x32, &vblank_handler);
 
 	{
 		for (count=-1; count; ) {} // clear counter and let current frame finish
-		int iters = 0;
-		while (count < 60) {
-			iters++;
-		}
-		printf("%d C loop iters per second (%.3f MHz ez80 equivalent)\n", iters, AGON_CLK * (float)iters / 292668.0f);
+		delay_1sec(); // should really be 1 second if 18.432MHz cpu
+		delay_1sec();
+		printf("ez80 frequency:                      %.3f MHz\n", 2 * AGON_CLK * 60.0f / count);
 	}
-	{
-		for (count=-1; count; ) {} // clear counter and let current frame finish
-		int iters = 0;
-		while (count < 60) {
-			asm("	mlt bc\n"
-				:::"bc");
-			iters++;
-		}
-		printf("%d C loop mlt iters per second (%.3f MHz ez80 equivalent)\n", iters, AGON_CLK * (float)iters / 236407.0f);
-	}
+	printf("\n");
+
 	{
 		for (count=-1; count; ) {} // clear counter and let current frame finish
 		int iters = 0;
@@ -66,15 +70,34 @@ int main() {
 			);
 			iters++;
 		}
-		printf("%d MOS calls (%.2f x Agon Light)\n", iters, (float)iters / 77478.0f);
+		printf("Syscalls per second                  %d MOS calls (%.2f x Agon Light)\n", iters, (float)iters / 77478.0f);
 	}
+	printf("\n");
+
+	{
+		for (count=-1; count; ) {} // clear counter and let current frame finish
+		for (int j=0; j<10; j++) {
+			uint8_t i=0;
+			while (i<255) {
+				vdu_gp(i);
+				while (getsysvar_gp() != i) {}
+				i++;
+			}
+		}
+		float elapsed = (float)count / 60.0f;
+		printf("ez80 <-> VDP round-trips per second  %.0f\n", 2550.0f / elapsed);
+		printf("ez80 <-> VDP round-trip latency      %.2f ms\n", 1000.0f * elapsed / 2550.0f);
+	}
+
+
 	{
 		for (count=-1; count; ) {} // clear counter and let current frame finish
 		// load 64KiB of junk into the vdp
 		vdp_load_bitmap(128, 128, (uint32_t*)0x40000);
 		float elapsed = (float)count / 60.0f;
-		printf("%.2f seconds to upload 64KiB to VDP (%.2f KiB/sec, %.2f KBit/sec)\n", elapsed, 64.0f / elapsed, 8.0f*64.0f / elapsed);
+		printf("ez80 to VDP                          %.2f KiB/sec (%.2f KBit/sec)\n", 64.0f / elapsed, 8.0f*64.0f / elapsed);
 	}
+
 	{
 		for (count=-1; count; ) {} // clear counter and let current frame finish
 		// load 64KiB of junk into the vdp
@@ -83,9 +106,24 @@ int main() {
 		putch(128); putch(0);
 		fast_vdu((uint8_t*)0x40000, 65536);
 		float elapsed = (float)count / 60.0f;
-		printf("%.2f seconds to upload 64KiB to VDP with fast_vdu() (%.2f KiB/sec, %.2f KBit/sec)\n", elapsed, 64.0f / elapsed, 8.0f*64.0f / elapsed);
+		printf("ez80 to VDP (fast_vdu)               %.2f KiB/sec (%.2f KBit/sec)\n", 64.0f / elapsed, 8.0f*64.0f / elapsed);
 	}
+	printf("\n");
 	
+	mos_del("agon-bench.tmp");
+	{
+		for (count=-1; count; ) {} // clear counter and let current frame finish
+		mos_save("agon-bench.tmp", 0xa0000, 65536);
+		float elapsed = (float)count / 60.0f;
+		printf("SDCard write                         %.2f KiB/sec\n", 64.0f / elapsed);
+	}
+	{
+		for (count=-1; count; ) {} // clear counter and let current frame finish
+		mos_load("agon-bench.tmp", 0xa0000, 65536);
+		float elapsed = (float)count / 60.0f;
+		printf("SDCard read                          %.2f KiB/sec\n", 64.0f / elapsed);
+	}
+	mos_del("agon-bench.tmp");
 	
 	mos_setintvector(0x32, old_handler);
 

@@ -11,6 +11,7 @@ CXXFLAGS = -Wall -Wextra -Oz
 
 BSSHEAP_LOW=060000
 BSSHEAP_HIGH=070000
+STACK_HIGH=080000
 # ----------------------------
 
 include $(shell cedev-config --makefile)
