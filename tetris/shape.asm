@@ -53,7 +53,7 @@ shape_rot90: ; src(hl), dest(de)
 		db 1,5,9,13
 		db 0,4,8,12
 
-shape_num_shapes=6
+shape_num_shapes=7
 shape_shapes:
 	dw .shape0
 	dw .shape1

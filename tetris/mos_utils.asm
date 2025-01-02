@@ -9,6 +9,13 @@ macro mos_header startfn
 		db 0 ; ADL disabled
 mend
 
+macro putbuf start,end
+		ld hl,{start}
+		ld bc,{end}-{start}
+		xor a
+		rst.lis 0x18
+mend
+
 macro puts msg
 		jr @over_msg	
 	@msg:

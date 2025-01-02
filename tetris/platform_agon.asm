@@ -1,5 +1,9 @@
 sysvar_keyascii equ 5
 
+macro setcolor col
+		putc 17 : putc {col}
+mend
+
 plt_draw_board: ; board(hl)
 		; draw the board to screen
 		putc 31 : putc 0 : putc 0		; cursor_to(0,0)
@@ -7,17 +11,33 @@ plt_draw_board: ; board(hl)
 	.loopy:
 		push bc
 		ld b,board_width
-		putc '|'
+		setcolor 129
+		putc '='
+		setcolor 130
+		setcolor 15
 		.loopx
 			ld a,(hl)
 			inc hl
+			cp ' '
+			push af
+			jr z,.isspace
+			setcolor 131
+			setcolor 15
+			jr .ok
+			.isspace:
+			setcolor 128
+			setcolor 15
+			.ok:
+			pop af
 			rst.lis 0x10
 			djnz .loopx
-		putc '|'
+		setcolor 129
+		putc '='
 		putc 13 : putc 10
 		pop bc
 		djnz .loopy
-		puts "------------\r\n"
+		setcolor 129
+		puts "============\r\n"
 		ret
 
 plt_poll:
@@ -36,6 +56,7 @@ sysvar_ptr:
 timer_start:	ds 2
 
 get_sysvar: ; sysvar offset (a) -> value (a)
+		; icky. assume segment 0x4
 		lil : ld hl,(sysvar_ptr) : db 0x4
 		add l
 		ld l,a
@@ -46,7 +67,6 @@ get_sysvar: ; sysvar offset (a) -> value (a)
 		ret
 
 gettime:	; -> centiseconds (de)
-		; icky. assume segment 0x4
 		lil : ld hl,(sysvar_ptr) : db 0x4
 		lil : ld e,(hl)
 		lil : inc hl
@@ -93,8 +113,14 @@ plt_gameinit:
 		putc 22 : putc 8
 		; hide cursor
 		putc 23 : putc 1 : putc 0
+
+		putbuf tileset,tileset.end
 		ret
 
+tileset:
+		db 23,'#',0xff,0x81,0x81,0x81,0x81,0x81,0x81,0xff
+		db 23,'=',0xff,0x44,0x44,0x44,0xff,0x22,0x22,0x22
+tileset.end:
 
 plt_init:
 		ld a,8

@@ -25,13 +25,22 @@ start:
 		ld hl,tet
 		call new_random_tetromino
 		call reset_position
+		call reset_score
 
 	.gameloop:
 		call redraw_board
+		call handle_completed_rows
 		call plt_start_timer
+		; clear the 'player chose to move down' flag
+		xor a : ld (moved_down),a
+
 		.tickloop:
 			call plt_poll
 			call handle_controls
+
+			ld a,(moved_down)
+			or a
+			jr nz,.exit_tick_moved_down
 
 			call plt_timer_elapsed
 			ld a,l
@@ -39,12 +48,114 @@ start:
 			jr c,.tickloop
 
 		call move_down
-
+	.exit_tick_moved_down:
 		jr .gameloop
 
 		ld hl,0
 		lil : pop iy
 		ret.lis
+
+reset_score:
+		ld hl,0
+		ld (score),hl
+		ret
+
+increment_score:
+		ld hl,(score)
+		inc hl
+		ld (score),hl
+		ret
+
+handle_completed_rows:
+		xor a : ld (.did_complete_row),a
+		ld b,board_height
+	.scan_rows_loop:
+		ld a,b
+		or a
+		jr z,.done_scanning
+		dec b
+		push bc
+		call .is_row_complete
+		pop bc
+		jr nc,.scan_rows_loop
+		; row is complete
+		push bc
+			call increment_score
+			ld hl,board
+			ld c,0
+			call board_get
+			ld b,board_width
+			ld a,'X'
+		.mark_row_loop:
+			ld (hl),a
+			inc hl
+			djnz .mark_row_loop
+		pop bc
+		ld a,1 : ld (.did_complete_row),a
+		jr .scan_rows_loop
+	.done_scanning:
+		ld a,(.did_complete_row)
+		or a
+		ret z
+		call redraw_board
+		ld b,15
+		call plt_wait
+		call .remove_complete_rows
+		call redraw_board
+		ret
+
+	.is_row_complete: ; row(b) -> set carry flag if complete
+			ld hl,board
+			ld c,0
+			call board_get
+			ld b,board_width
+			ld a,' '
+		.test_row_complete_loop:
+			cp (hl)
+			jr z,.not_complete
+			inc hl
+			djnz .test_row_complete_loop
+			xor a
+			scf
+			ret
+		.not_complete:
+			xor a
+			ret
+	
+	.remove_complete_rows:
+			ld b,board_height
+		.scan_rows_loop2:
+			ld a,b
+			or a
+			ret z
+			dec b
+
+			push bc
+			call .is_row_complete
+			pop bc
+			jr nc,.scan_rows_loop2
+			; row is complete. shuffle down board
+			push bc
+				ld h,0
+				ld l,b
+				ld de,hl
+				add hl,hl : add hl,hl : add hl,hl	; row*8
+				add hl,de : add hl,de				; row*10
+				ld bc,hl
+				ld hl,board+10
+				add hl,bc
+				ld de,hl
+				dec de
+				ld hl,board
+				add hl,bc
+				dec hl
+				lddr
+			pop bc
+			; rescan same row, since stuff has been shuffled down
+			inc b
+			jr .scan_rows_loop2
+			ret
+	.did_complete_row: ds 1
 
 redraw_board:
 		ld hl,board
@@ -117,8 +228,14 @@ handle_controls:
 	.nup:
 		bit 3,e
 		jr z,.skip
-		ld a,h : add 1 : ld h,a
-		ld a,1 : ld (.didmove),a
+		call move_down
+		ld a,1
+		ld (moved_down),a
+		call redraw_board
+		; wait a little
+		ld b,4
+		call plt_wait
+		ret
 	.skip:
 		; is position possible?
 		push hl
@@ -138,7 +255,7 @@ handle_controls:
 		call redraw_board
 
 		; wait a little
-		ld b,10
+		ld b,8
 		call plt_wait
 
 		ret
@@ -168,7 +285,7 @@ new_random_tetromino: ; shape_t(hl)
 		ld a,r
 	.loop:
 		sub shape_num_shapes
-		cp shape_num_shapes-1
+		cp shape_num_shapes
 		jr nc,.loop
 		ld hl,shape_shapes
 		sla a
@@ -187,6 +304,8 @@ new_random_tetromino: ; shape_t(hl)
 ; keystate bits:
 ; 0 - left, 1 - right, 2 - up, 3 - down
 keystate: db 0
+moved_down: db 0
+score:  ds 2
 board:	ds {sizeof}board_t
 tet:	ds {sizeof}shape_t
 tetpos:	ds 2	; x,y
