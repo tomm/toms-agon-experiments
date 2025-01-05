@@ -1,13 +1,10 @@
-board_width=10
-board_height=24
-
-struct board_t
-		tiles ds board_width*board_height
-endstruct
+board_width: equ 10
+board_height: equ 24
+sizeof_Board: equ 240
 
 board_new:  ; dest(hl)
 		ld a,' '
-		ld bc,{sizeof}board_t
+		ld bc,sizeof_Board
 		call mem_set
 		ret
 
@@ -18,10 +15,9 @@ board_get: ; board(hl), x(c), y(b) -> tile(a), &tile(hl)
 		sla b
 		sla b
 		sla a
-		add b
-		add c
-
-		add l
+		add a,b
+		add a,c
+		add a,l
 		ld l,a
 		ld a,h
 		adc 0
@@ -39,13 +35,13 @@ board_set: ; board(hl), x(c), y(b), value(a)
 board_bounds: ; x(c), y(b) -> carry flag set if out of bounds
 		ld a,c
 		cp board_width
-		jr nc,.oob
+		jr nc,@oob
 		ld a,b
 		cp board_height
-		jr nc,.oob
+		jr nc,@oob
 		xor a
 		ret
-	.oob:
+@oob:
 		xor a
 		ccf
 		ret
@@ -53,111 +49,180 @@ board_bounds: ; x(c), y(b) -> carry flag set if out of bounds
 ; A shape landed. Write it to the board
 board_add_shape: ; board(hl), shape(de), offset_x(c), offset_y(b)
 		push ix
-		ld ix,bc
+		push iy
+
 		; skip shape sz byte
 		inc de
 
-		repeat 4
-			repeat 4
-				push bc
-				call board_bounds
-				pop bc
-				jr c,@oob
+		; shape in iy
+		push de
+		pop iy
 
-				; tile from shape
-				ld a,(de)
-				cp ' '
-				jr z,@oob
+		ld d,4
+@yloop:
+		ld e,4
+@xloop:
+			push de
 
-				push hl
-				push bc
-				call board_set
-				pop bc
-				pop hl
-			@oob:
-				inc de
-				inc c
-			rend
-			ld a,c : sub 4 : ld c,a
+			push bc
+			call board_bounds
+			pop bc
+			jr c,@oob
+
+			; tile from shape
+			ld a,(iy+0)
+			cp ' '
+			jr z,@oob
+
+			push hl
+			push bc
+			call board_set
+			pop bc
+			pop hl
+@oob:
+			inc iy
+			inc c
+			pop de
+
+			dec e
+			ld a,e
+			or a
+			jr nz,@xloop
+
+			ld a,c
+			sub 4
+			ld c,a
 			inc b
-		rend
 
+			dec d
+			ld a,d
+			or a
+			jr nz,@yloop
+
+		pop iy
 		pop ix
 		ret
 
 board_erase_shape: ; board(hl), shape(de), offset_x(c), offset_y(b)
 		push ix
-		ld ix,bc
+		push iy
+
 		; skip shape sz byte
 		inc de
 
-		repeat 4
-			repeat 4
-				push bc
-				call board_bounds
-				pop bc
-				jr c,@oob
+		; shape in iy
+		push de
+		pop iy
 
-				; tile from shape
-				ld a,(de)
-				cp ' '
-				jr z,@oob
-				ld a,' '
+		ld d,4
+@yloop:
+		ld e,4
+@xloop:
+			push de
 
-				push hl
-				push bc
-				call board_set
-				pop bc
-				pop hl
-			@oob:
-				inc de
-				inc c
-			rend
-			ld a,c : sub 4 : ld c,a
+			push bc
+			call board_bounds
+			pop bc
+			jr c,@oob
+
+			; tile from shape
+			ld a,(iy+0)
+			cp ' '
+			jr z,@oob
+			ld a,' '
+
+			push hl
+			push bc
+			call board_set
+			pop bc
+			pop hl
+@oob:
+			inc iy
+			inc c
+			pop de
+
+			dec e
+			ld a,e
+			or a
+			jr nz,@xloop
+
+			ld a,c
+			sub 4
+			ld c,a
 			inc b
-		rend
 
+			dec d
+			ld a,d
+			or a
+			jr nz,@yloop
+
+		pop iy
 		pop ix
 		ret
 
 board_shape_collide:  ; board(hl), shape(de), offset_x(c), offset_y(b) -> carry set if collides
 		push ix
-		ld ix,bc
+		push iy
+
 		; skip shape sz byte
 		inc de
 
-		repeat 4
-			repeat 4
-				; tile from shape
-				ld a,(de)
-				cp ' '
-				jr z,@skip
+		; shape in iy
+		push de
+		pop iy
 
-				; shape tile is out of bounds on board. consider this a collision
-				push bc
-				call board_bounds
-				pop bc
-				jp c,_board_shape_collide_collision
+		ld d,4
+@yloop:
+		ld e,4
+@xloop:
+			push de
 
-				push hl
-				push bc
-				call board_get
-				pop bc
-				pop hl
+			; tile from shape
+			ld a,(iy+0)
+			cp ' '
+			jr z,@skip
 
-				cp ' '
-				jp nz,_board_shape_collide_collision
-			@skip:
-				inc de
-				inc c
-			rend
-			ld a,c : sub 4 : ld c,a
-			inc b
-		rend
+			; shape tile is out of bounds on board. consider this a collision
+			push bc
+			call board_bounds
+			pop bc
+			jp c,_board_shape_collide_collision
+
+			push hl
+			push bc
+			call board_get
+			pop bc
+			pop hl
+
+			cp ' '
+			jp nz,_board_shape_collide_collision
+@skip:
+			inc iy
+			inc c
+			pop de
+
+			dec e
+			ld a,e
+			or a
+			jr nz,@xloop
+
+		ld a,c
+		sub 4
+		ld c,a
+		inc b
+
+		dec d
+		ld a,d
+		or a
+		jr nz,@yloop
+
+		pop iy
 		pop ix
 		xor a
 		ret
-	_board_shape_collide_collision:
+_board_shape_collide_collision:
+		pop hl
+		pop iy
 		pop ix
 		xor a
 		ccf

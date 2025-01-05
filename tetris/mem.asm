@@ -1,20 +1,19 @@
 mem_cmp: ; obj1(hl), obj2(de), len(bc) -> carry set if neq
 		ld a,c
 		or b
-		jr z,.eq
+		jr z,@eq
 
 		ld a,(de)
 		cp (hl)
-		jr nz,.neq
+		jr nz,@neq
 		inc de
 		inc hl
 		dec bc
 		jr mem_cmp
-
-	.eq:
+@eq:
 		xor a
 		ret
-	.neq:
+@neq:
 		xor a
 		ccf
 		ret
@@ -40,7 +39,8 @@ mem_set: ; dest(hl), value(a), count(bc)
 		or c
 		ret z
 
-		ld de,hl
+		ld d,h
+		ld e,l
 		inc de
 
 		ldir

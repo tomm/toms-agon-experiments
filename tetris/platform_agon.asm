@@ -1,14 +1,14 @@
-sysvar_keyascii equ 5
+sysvar_keyascii: equ 5
 
 draw_tile: ; tile(a) -> does vdu to set tile color
 		ld b,'0'
 		sub b
 		ld b,a
-		add b
-		add b
+		add a,b
+		add a,b
 		ld d,0
 		ld e,a
-		ld hl,.tile
+		ld hl,@tile
 		add hl,de
 		ld a,(hl)
 		inc hl
@@ -26,7 +26,7 @@ draw_tile: ; tile(a) -> does vdu to set tile color
 		pop af
 		rst.lis 0x10
 		ret
-	.tile: ; tile,bg,fg (using agon 64-col palette)
+@tile: ; tile,bg,fg (using agon 64-col palette)
 		db '#',129,9	; red
 		db '#',130,10	; green
 		db '#',131,11	; yellow
@@ -37,41 +37,41 @@ draw_tile: ; tile(a) -> does vdu to set tile color
 		db '#',136,7	; grey - the 'clearing row' tile
 
 print_hex_a:
-    push af
-    push bc
-    push de
-    push hl
-    ld b, a
+		push af
+		push bc
+		push de
+		push hl
+		ld b, a
 
-    ; output high nibble as ascii hex
-    srl a
-    srl a
-    srl a
-    srl a
-    ld de,.hex_chr
-    ld hl,0
-    ld l,a
-    add hl,de
-    ld a,(hl)
-    rst.lis $10
+		; output high nibble as ascii hex
+		srl a
+		srl a
+		srl a
+		srl a
+		ld de,@hex_chr
+		ld hl,0
+		ld l,a
+		add hl,de
+		ld a,(hl)
+		rst.lis $10
 
-    ; output low nibble as ascii hex
-    ld a, b
-    and $f
-    ld de,.hex_chr
-    ld hl,0
-    ld l,a
-    add hl,de
-    ld a,(hl)
-    rst.lis $10
+		; output low nibble as ascii hex
+		ld a, b
+		and $f
+		ld de,@hex_chr
+		ld hl,0
+		ld l,a
+		add hl,de
+		ld a,(hl)
+		rst.lis $10
 
-    pop hl
-    pop de
-    pop bc
-    pop af
-    ret
+		pop hl
+		pop de
+		pop bc
+		pop af
+		ret
 
-	.hex_chr:
+@hex_chr:
 		db "0123456789ABCDEF"
 
 print_hex_hl:
@@ -84,51 +84,55 @@ print_hex_hl:
 plt_draw_score: ; score(hl)
 		setcolor 128
 		setcolor 15
-		putc 31 : putc 30 : putc 3		; cursor_to(10,3)
+		putc 31
+		putc 30
+		putc 3		; cursor_to(10,3)
 		call print_hex_hl
 		ret
 
 plt_draw_board: ; board(hl)
 		; draw the board to screen
-		putc 31 : putc 10 : putc 3		; cursor_to(10,3)
+		putc 31
+		putc 10
+		putc 3		; cursor_to(10,3)
 		; don't draw top 2 rows
 		ld de,board_width
 		add hl,de
 		add hl,de
 		ld b,board_height-2
-	.loopy:
+@loopy:
 		push bc
 		ld b,board_width
 		setcolor 129
 		putc '='
 		setcolor 130
 		setcolor 15
-		.loopx
+@loopx:
 			ld a,(hl)
 			inc hl
 			cp ' '
 			push_all
-			jr z,.isspace
+			jr z,@isspace
 			call draw_tile
-			jr .ok
-			.isspace:
+			jr @ok
+@isspace:
 			setcolor 128
 			setcolor 15
 			putc ' '
-			.ok:
+@ok:
 			pop_all
-			djnz .loopx
+			djnz @loopx
 		setcolor 15
 		setcolor 129
 		putc '='
 		; move to next row
 		ld b,board_width+2
-	.wipe_loop:
+@wipe_loop:
 		putc 8
-		djnz .wipe_loop
+		djnz @wipe_loop
 		putc 10
 		pop bc
-		djnz .loopy
+		djnz @loopy
 		setcolor 129
 		puts "============\r\n"
 		ret
@@ -141,7 +145,8 @@ plt_waitkey: ; -> ascii key(a)
 		or a
 		jp z,plt_waitkey
 		push af
-		xor a : ld (last_ascii_keydown),a
+		xor a
+		ld (last_ascii_keydown),a
 		pop af
 		ret
 
@@ -150,33 +155,48 @@ sysvar_ptr:
 		db 0xb
 timer_start:	ds 2
 
+	macro lil
+			db 0x5b
+	endmacro
+
 get_sysvar: ; sysvar offset (a) -> value (a)
 		; icky. assume segment 0x4
-		lil : ld hl,(sysvar_ptr) : db 0x4
-		add l
+		lil
+		ld hl,(sysvar_ptr)
+		db 0x4
+		add a,l
 		ld l,a
 		ld a,h
 		adc 0
 		ld h,a
-		lil : ld a,(hl)
+		lil
+		ld a,(hl)
 		ret
 
 set_sysvar: ; sysvar offset (a), value (b)
 		; icky. assume segment 0x4
-		lil : ld hl,(sysvar_ptr) : db 0x4
-		add l
+		lil
+		ld hl,(sysvar_ptr)
+		db 0x4
+		add a,l
 		ld l,a
 		ld a,h
 		adc 0
 		ld h,a
-		lil : ld (hl),b
+		lil
+		ld (hl),b
 		ret
 
 gettime:	; -> centiseconds (de)
-		lil : ld hl,(sysvar_ptr) : db 0x4
-		lil : ld e,(hl)
-		lil : inc hl
-		lil : ld d,(hl)
+		lil
+		ld hl,(sysvar_ptr)
+		db 0x4
+		lil
+		ld e,(hl)
+		lil
+		inc hl
+		lil
+		ld d,(hl)
 		ret
 		
 
@@ -197,36 +217,39 @@ plt_wait:	; vblanks to wait (b)
 		sla b
 		call gettime
 		ld a,e
-		add b
+		add a,b
 		ld l,a
 		ld a,d
 		adc 0
 		ld h,a
 		; hl is end time
 		push hl
-	.loop:
+@loop:
 		call gettime
 		pop hl
 		push hl
 		xor a
 		sbc hl,de
-		jr nc,.loop
+		jr nc,@loop
 		pop hl
 		ret
 
 plt_gameinit:
 		; mode 8
-		putc 22 : putc 8
+		putc 22
+		putc 8
 		; hide cursor
-		putc 23 : putc 1 : putc 0
+		putc 23
+		putc 1
+		putc 0
 
-		putbuf tileset,tileset.end
+		putbuf tileset,tileset_end
 		ret
 
 tileset:
 		db 23,'#',0xff,0x81,0x81,0x81,0x81,0x81,0x81,0xff
 		db 23,'=',0xff,0x44,0x44,0x44,0xff,0x22,0x22,0x22
-tileset.end:
+tileset_end:
 
 last_ascii_keydown: ds 1
 
@@ -238,14 +261,14 @@ plt_init:
 		rst.lis 8
 		ld (sysvar_ptr),ix
 
-		ld hl,.on_keyboard_event
+		ld hl,@on_keyboard_event
 		ld c,1
 		ld a,0x1d		; mos_setkbvector
 		rst.lis 0x8
 		ret
 
 	; called in ADL mode
-	.on_keyboard_event
+@on_keyboard_event:
 		push bc
 		push hl
 		push ix
@@ -256,52 +279,54 @@ plt_init:
 		ld c,(ix+1)		; modifier keys
 		ld e,(ix+2)		; fabgl vkey code
 		ld d,(ix+3)		; is key down?
-		call.sis .on_keyboard_event_z80
+		call.sis @on_keyboard_event_z80
 
 		pop ix
 		pop hl
 		pop bc
 		ret
 
-	.on_keyboard_event_z80:
+@on_keyboard_event_z80:
 		ld a,d	
 		or a
-		jr z, .notKeyDown
+		jr z,@notKeyDown
 		ld a,b
 		ld (last_ascii_keydown),a
-	.notKeyDown
+@notKeyDown:
 
 		ld b,0
 		ld a,e
 		cp 154			; left
-		jr nz,.notl
+		jr nz,@notl
 		ld b,1
-		jr .skip
-	.notl:
+		jr @skip
+@notl:
 		cp 156			; right
-		jr nz,.notr
+		jr nz,@notr
 		ld b,2
-		jr .skip
-	.notr:
+		jr @skip
+@notr:
 		cp 150			; up
-		jr nz,.notu
+		jr nz,@notu
 		ld b,4
-		jr .skip
-	.notu:
+		jr @skip
+@notu:
 		cp 152			; down
-		jr nz,.skip
+		jr nz,@skip
 		ld b,8
-		jr .skip
-	.skip:
+		jr @skip
+@skip:
 		ld a,d
 		or a
-		jr z,.keyup
+		jr z,@keyup
 		ld a,(keystate)
 		or b
 		ld (keystate),a
 		ret.lis
-	.keyup:
-		ld a,b : cpl : ld b,a
+@keyup:
+		ld a,b
+		cpl
+		ld b,a
 		ld a,(keystate)
 		and b
 		ld (keystate),a

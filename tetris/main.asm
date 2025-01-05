@@ -1,4 +1,4 @@
-		include "ez80.asm"
+		assume adl=0	
 		include "agon_z80_helpers.asm"
 		mos_header start
 
@@ -9,11 +9,11 @@
 		include "splash.asm"
 
 ; Timings in vblanks
-GAME_TURNTIME equ 30
-DELAY_MOVEDOWN equ 3		; delay after player presses down key
+GAME_TURNTIME: equ 30
+DELAY_MOVEDOWN: equ 3		; delay after player presses down key
 
 start:
-		lil : push iy
+		push.lil iy
 
 		call plt_init
 		call put_logo
@@ -31,32 +31,33 @@ start:
 		call reset_position
 		call reset_score
 
-	.gameloop:
+@gameloop:
 		call redraw_board
 		call handle_completed_rows
 		call plt_start_timer
 		; clear the 'player chose to move down' flag
-		xor a : ld (moved_down),a
+		xor a
+		ld (moved_down),a
 
-		.tickloop:
+@tickloop:
 			call plt_poll
 			call handle_controls
 
 			ld a,(moved_down)
 			or a
-			jr nz,.exit_tick_moved_down
+			jr nz,@exit_tick_moved_down
 
 			call plt_timer_elapsed
 			ld a,l
 			cp GAME_TURNTIME
-			jr c,.tickloop
+			jr c,@tickloop
 
 		call move_down
-	.exit_tick_moved_down:
-		jr .gameloop
+@exit_tick_moved_down:
+		jr @gameloop
 
 		ld hl,0
-		lil : pop iy
+		pop.lil iy
 		ret.lis
 
 reset_score:
@@ -71,17 +72,18 @@ increment_score:
 		ret
 
 handle_completed_rows:
-		xor a : ld (.did_complete_row),a
+		xor a
+		ld (@did_complete_row),a
 		ld b,board_height
-	.scan_rows_loop:
+@scan_rows_loop:
 		ld a,b
 		or a
-		jr z,.done_scanning
+		jr z,@done_scanning
 		dec b
 		push bc
-		call .is_row_complete
+		call @is_row_complete
 		pop bc
-		jr nc,.scan_rows_loop
+		jr nc,@scan_rows_loop
 		; row is complete
 		push bc
 			call increment_score
@@ -90,65 +92,72 @@ handle_completed_rows:
 			call board_get
 			ld b,board_width
 			ld a,'7'	; '7': the 'clearing row' tile
-		.mark_row_loop:
+@mark_row_loop:
 			ld (hl),a
 			inc hl
-			djnz .mark_row_loop
+			djnz @mark_row_loop
 		pop bc
-		ld a,1 : ld (.did_complete_row),a
-		jr .scan_rows_loop
-	.done_scanning:
-		ld a,(.did_complete_row)
+		ld a,1
+		ld (@did_complete_row),a
+		jr @scan_rows_loop
+@done_scanning:
+		ld a,(@did_complete_row)
 		or a
 		ret z
 		call redraw_board
 		ld b,15
 		call plt_wait
-		call .remove_complete_rows
+		call @remove_complete_rows
 		call redraw_board
 		ret
 
-	.is_row_complete: ; row(b) -> set carry flag if complete
+@is_row_complete: ; row(b) -> set carry flag if complete
 			ld hl,board
 			ld c,0
 			call board_get
 			ld b,board_width
 			ld a,' '
-		.test_row_complete_loop:
+@test_row_complete_loop:
 			cp (hl)
-			jr z,.not_complete
+			jr z,@not_complete
 			inc hl
-			djnz .test_row_complete_loop
+			djnz @test_row_complete_loop
 			xor a
 			scf
 			ret
-		.not_complete:
+@not_complete:
 			xor a
 			ret
 	
-	.remove_complete_rows:
+@remove_complete_rows:
 			ld b,board_height
-		.scan_rows_loop2:
+@scan_rows_loop2:
 			ld a,b
 			or a
 			ret z
 			dec b
 
 			push bc
-			call .is_row_complete
+			call @is_row_complete
 			pop bc
-			jr nc,.scan_rows_loop2
+			jr nc,@scan_rows_loop2
 			; row is complete. shuffle down board
 			push bc
 				ld h,0
 				ld l,b
-				ld de,hl
-				add hl,hl : add hl,hl : add hl,hl	; row*8
-				add hl,de : add hl,de				; row*10
-				ld bc,hl
+				ld d,h
+				ld e,l
+				add hl,hl
+				add hl,hl
+				add hl,hl	; row*8
+				add hl,de
+				add hl,de				; row*10
+				ld b,h
+				ld c,l
 				ld hl,board+10
 				add hl,bc
-				ld de,hl
+				ld d,h
+				ld e,l
 				dec de
 				ld hl,board
 				add hl,bc
@@ -157,9 +166,9 @@ handle_completed_rows:
 			pop bc
 			; rescan same row, since stuff has been shuffled down
 			inc b
-			jr .scan_rows_loop2
+			jr @scan_rows_loop2
 			ret
-	.did_complete_row: ds 1
+@did_complete_row: ds 1
 
 redraw_board:
 		ld hl,board
@@ -193,10 +202,10 @@ move_down:
 		ld de,tet
 		call board_shape_collide
 		pop bc
-		jr c,.hit
+		jr c,@hit
 		ld (tetpos),bc
 		ret
-	.hit:
+@hit:
 		ld hl,board
 		ld de,tet
 		ld bc,(tetpos)
@@ -208,32 +217,39 @@ move_down:
 
 handle_controls:
 		xor a
-		ld (.didmove),a
+		ld (@didmove),a
 		ld hl,(tetpos)
 		ld a,(keystate)
 		ld e,a
 		bit 0,e
-		jr z,.nleft
-		ld a,l : sub 1 : ld l,a
-		ld a,1 : ld (.didmove),a
-	.nleft:
+		jr z,@nleft
+		ld a,l
+		sub 1
+		ld l,a
+		ld a,1
+		ld (@didmove),a
+@nleft:
 		bit 1,e
-		jr z,.nright
-		ld a,l : add 1 : ld l,a
-		ld a,1 : ld (.didmove),a
-	.nright:
+		jr z,@nright
+		ld a,l
+		add 1
+		ld l,a
+		ld a,1
+		ld (@didmove),a
+@nright:
 		bit 2,e
-		jr z,.nup
+		jr z,@nup
 		push de
 		push hl
 		call try_rotate
 		pop hl
 		pop de
-		jr c,.nup
-		ld a,1 : ld (.didmove),a
-	.nup:
+		jr c,@nup
+		ld a,1
+		ld (@didmove),a
+@nup:
 		bit 3,e
-		jr z,.skip
+		jr z,@skip
 		call move_down
 		ld a,1
 		ld (moved_down),a
@@ -242,17 +258,18 @@ handle_controls:
 		ld b,DELAY_MOVEDOWN
 		call plt_wait
 		ret
-	.skip:
+@skip:
 		; is position possible?
 		push hl
-		ld bc,hl
+		ld b,h
+		ld c,l
 		ld hl,board
 		ld de,tet
 		call board_shape_collide
 		pop hl
 		ret c
 
-		ld a,(.didmove)
+		ld a,(@didmove)
 		or a
 		ret z
 
@@ -265,37 +282,37 @@ handle_controls:
 		call plt_wait
 
 		ret
-	.didmove: ds 1
+@didmove: ds 1
 
 try_rotate: ; set carry on success
-		ld de,.s
+		ld de,@s
 		ld hl,tet
 		call shape_rot90
 
 		ld hl,board
-		ld de,.s
+		ld de,@s
 		ld bc,(tetpos)
 		call board_shape_collide
 		ret c
 
-		ld hl,.s
+		ld hl,@s
 		ld de,tet
-		ld bc,{sizeof}shape_t
+		ld bc,sizeof_Shape
 		call mem_cpy
 		xor a
 		ret
-	.s:	ds {sizeof}shape_t
+@s:	ds sizeof_Shape
 
 new_random_tetromino: ; shape_t(hl)
 		ex de,hl
 		ld a,r
-	.loop:
+@loop:
 		sub shape_num_shapes
 		cp shape_num_shapes
-		jr nc,.loop
+		jr nc,@loop
 		ld hl,shape_shapes
 		sla a
-		add l
+		add a,l
 		ld l,a
 		ld a,0
 		adc h
@@ -312,6 +329,6 @@ new_random_tetromino: ; shape_t(hl)
 keystate: db 0
 moved_down: db 0
 score:  ds 2
-board:	ds {sizeof}board_t
-tet:	ds {sizeof}shape_t
+board:	ds sizeof_Board
+tet:	ds sizeof_Shape
 tetpos:	ds 2	; x,y

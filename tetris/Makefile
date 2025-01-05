@@ -1,6 +1,6 @@
 default:
-	rasm test.asm -wu -msep . -ob test.bin
-	rasm main.asm -wu -msep . -ob agonsoft-tetris.bin
+	ez80asm test.asm test.bin
+	ez80asm main.asm agonsoft-tetris.bin
 
 clean:
 	-rm *.bin
