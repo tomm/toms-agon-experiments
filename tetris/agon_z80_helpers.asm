@@ -16,6 +16,20 @@ macro putbuf start,end
 		rst.lis 0x18
 mend
 
+macro push_all
+		push af
+		push bc
+		push de
+		push hl
+mend
+
+macro pop_all
+		pop hl
+		pop de
+		pop bc
+		pop af
+mend
+
 macro puts msg
 		jr @over_msg	
 	@msg:
@@ -44,3 +58,8 @@ mend
 macro col_white
 		putc 17 : putc 15
 mend
+
+macro setcolor col
+		putc 17 : putc {col}
+mend
+

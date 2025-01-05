@@ -1,5 +1,5 @@
 		include "ez80.asm"
-		include "mos_utils.asm"
+		include "agon_z80_helpers.asm"
 		mos_header start
 
 		include "mem.asm"
@@ -7,6 +7,10 @@
 		include "board.asm"
 		include "platform_agon.asm"
 		include "splash.asm"
+
+; Timings in vblanks
+GAME_TURNTIME equ 30
+DELAY_MOVEDOWN equ 3		; delay after player presses down key
 
 start:
 		lil : push iy
@@ -44,7 +48,7 @@ start:
 
 			call plt_timer_elapsed
 			ld a,l
-			cp 60
+			cp GAME_TURNTIME
 			jr c,.tickloop
 
 		call move_down
@@ -85,7 +89,7 @@ handle_completed_rows:
 			ld c,0
 			call board_get
 			ld b,board_width
-			ld a,'X'
+			ld a,'7'	; '7': the 'clearing row' tile
 		.mark_row_loop:
 			ld (hl),a
 			inc hl
@@ -165,6 +169,8 @@ redraw_board:
 
 		ld hl,board
 		call plt_draw_board
+		ld hl,(score)
+		call plt_draw_score
 
 		ld hl,board
 		ld de,tet
@@ -233,7 +239,7 @@ handle_controls:
 		ld (moved_down),a
 		call redraw_board
 		; wait a little
-		ld b,4
+		ld b,DELAY_MOVEDOWN
 		call plt_wait
 		ret
 	.skip:

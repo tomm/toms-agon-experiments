@@ -65,42 +65,42 @@ shape_shapes:
 .shape0:
 	db 0
 	db "    "
-	db " ## "
-	db " ## "
+	db " 00 "
+	db " 00 "
 	db "    "
 .shape1:
 	db 0
-	db " #  "
-	db " #  "
-	db " #  "
-	db " #  "
+	db " 1  "
+	db " 1  "
+	db " 1  "
+	db " 1  "
 .shape2:
 	db 1
-	db " #  "
-	db " #  "
-	db " ## "
+	db " 2  "
+	db " 2  "
+	db " 22 "
 	db "    "
 .shape3:
 	db 1
-	db " #  "
-	db "### "
+	db " 3  "
+	db "333 "
 	db "    "
 	db "    "
 .shape4:
 	db 1
-	db " #  "
-	db " #  "
-	db "##  "
+	db " 4  "
+	db " 4  "
+	db "44  "
 	db "    "
 .shape5:
 	db 1
-	db " #  "
-	db "##  "
-	db "#   "
+	db " 5  "
+	db "55  "
+	db "5   "
 	db "    "
 .shape6:
 	db 1
-	db " #  "
-	db " ## "
-	db "  # "
+	db " 6  "
+	db " 66 "
+	db "  6 "
 	db "    "
