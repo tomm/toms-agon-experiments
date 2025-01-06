@@ -5131,7 +5131,7 @@ int main(int argc, char **argv)
 	int num_initial_cmds = 0;
 	for (int i=1; i<argc; i++) {
 		if (argv[i][0] == '+') {
-			llist_add_to(&initial_cmds, argv[i]);
+			llist_add_to(&initial_cmds, argv[i]+1);
 			num_initial_cmds++;
 		}
 	}

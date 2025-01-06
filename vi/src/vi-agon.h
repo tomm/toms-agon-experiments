@@ -3,7 +3,7 @@
 
 #include <mos_api.h>
 
-#define VI_VER "Agon VI v1.02 is based on Busybox VI"
+#define VI_VER "Agon VI v1.03 is based on Busybox VI"
 
 // this is just nonsense I made to get it to compile
 #define KEYCODE_UP 0x995
@@ -46,7 +46,7 @@ static inline void goto_xy(int x, int y) {
 }
 static inline int system(const char *command)
 {
-	return mos_oscli(command, NULL, 0);	
+	return mos_oscli(command, &command, 1);	
 }
 
 #endif /* VI_AGON_H */
