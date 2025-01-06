@@ -1,3 +1,9 @@
+; FabGL (vdp-gl) virtual keycodes
+VK_UP: 		.equ 150
+VK_DOWN: 	.equ 152
+VK_LEFT: 	.equ 154
+VK_RIGHT: 	.equ 156
+
 sysvar_keyascii: equ 5
 
 draw_tile: ; tile(a) -> does vdu to set tile color
@@ -26,7 +32,7 @@ draw_tile: ; tile(a) -> does vdu to set tile color
 		pop af
 		rst.lis 0x10
 		ret
-@tile: ; tile,bg,fg (using agon 64-col palette)
+	@tile: ; tile,bg,fg (using agon 64-col palette)
 		db '#',129,9	; red
 		db '#',130,10	; green
 		db '#',131,11	; yellow
@@ -71,7 +77,7 @@ print_hex_a:
 		pop af
 		ret
 
-@hex_chr:
+	@hex_chr:
 		db "0123456789ABCDEF"
 
 print_hex_hl:
@@ -100,14 +106,14 @@ plt_draw_board: ; board(hl)
 		add hl,de
 		add hl,de
 		ld b,board_height-2
-@loopy:
+	@loopy:
 		push bc
 		ld b,board_width
 		setcolor 129
 		putc '='
 		setcolor 130
 		setcolor 15
-@loopx:
+	@loopx:
 			ld a,(hl)
 			inc hl
 			cp ' '
@@ -115,11 +121,11 @@ plt_draw_board: ; board(hl)
 			jr z,@isspace
 			call draw_tile
 			jr @ok
-@isspace:
+	@isspace:
 			setcolor 128
 			setcolor 15
 			putc ' '
-@ok:
+	@ok:
 			pop_all
 			djnz @loopx
 		setcolor 15
@@ -127,7 +133,7 @@ plt_draw_board: ; board(hl)
 		putc '='
 		; move to next row
 		ld b,board_width+2
-@wipe_loop:
+	@wipe_loop:
 		putc 8
 		djnz @wipe_loop
 		putc 10
@@ -224,7 +230,7 @@ plt_wait:	; vblanks to wait (b)
 		ld h,a
 		; hl is end time
 		push hl
-@loop:
+	@loop:
 		call gettime
 		pop hl
 		push hl
@@ -268,7 +274,7 @@ plt_init:
 		ret
 
 	; called in ADL mode
-@on_keyboard_event:
+	@on_keyboard_event:
 		push bc
 		push hl
 		push ix
@@ -286,36 +292,35 @@ plt_init:
 		pop bc
 		ret
 
-@on_keyboard_event_z80:
+	@on_keyboard_event_z80:
 		ld a,d	
 		or a
-		jr z,@notKeyDown
+		jr z,@f
 		ld a,b
 		ld (last_ascii_keydown),a
-@notKeyDown:
-
+	@@:
 		ld b,0
 		ld a,e
-		cp 154			; left
-		jr nz,@notl
+		cp VK_LEFT
+		jr nz,@f
 		ld b,1
 		jr @skip
-@notl:
-		cp 156			; right
-		jr nz,@notr
+	@@:
+		cp VK_RIGHT
+		jr nz,@f
 		ld b,2
 		jr @skip
-@notr:
-		cp 150			; up
-		jr nz,@notu
+	@@:
+		cp VK_UP
+		jr nz,@f
 		ld b,4
 		jr @skip
-@notu:
-		cp 152			; down
+	@@:
+		cp VK_DOWN
 		jr nz,@skip
 		ld b,8
 		jr @skip
-@skip:
+	@skip:
 		ld a,d
 		or a
 		jr z,@keyup
@@ -323,7 +328,7 @@ plt_init:
 		or b
 		ld (keystate),a
 		ret.lis
-@keyup:
+	@keyup:
 		ld a,b
 		cpl
 		ld b,a

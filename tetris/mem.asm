@@ -10,10 +10,10 @@ mem_cmp: ; obj1(hl), obj2(de), len(bc) -> carry set if neq
 		inc hl
 		dec bc
 		jr mem_cmp
-@eq:
+	@eq:
 		xor a
 		ret
-@neq:
+	@neq:
 		xor a
 		ccf
 		ret

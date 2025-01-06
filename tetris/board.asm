@@ -41,7 +41,7 @@ board_bounds: ; x(c), y(b) -> carry flag set if out of bounds
 		jr nc,@oob
 		xor a
 		ret
-@oob:
+	@oob:
 		xor a
 		ccf
 		ret
@@ -59,9 +59,9 @@ board_add_shape: ; board(hl), shape(de), offset_x(c), offset_y(b)
 		pop iy
 
 		ld d,4
-@yloop:
+	@yloop:
 		ld e,4
-@xloop:
+		@xloop:
 			push de
 
 			push bc
@@ -79,14 +79,12 @@ board_add_shape: ; board(hl), shape(de), offset_x(c), offset_y(b)
 			call board_set
 			pop bc
 			pop hl
-@oob:
+		@oob:
 			inc iy
 			inc c
 			pop de
 
 			dec e
-			ld a,e
-			or a
 			jr nz,@xloop
 
 			ld a,c
@@ -95,8 +93,6 @@ board_add_shape: ; board(hl), shape(de), offset_x(c), offset_y(b)
 			inc b
 
 			dec d
-			ld a,d
-			or a
 			jr nz,@yloop
 
 		pop iy
@@ -115,9 +111,9 @@ board_erase_shape: ; board(hl), shape(de), offset_x(c), offset_y(b)
 		pop iy
 
 		ld d,4
-@yloop:
+	@yloop:
 		ld e,4
-@xloop:
+		@xloop:
 			push de
 
 			push bc
@@ -136,14 +132,12 @@ board_erase_shape: ; board(hl), shape(de), offset_x(c), offset_y(b)
 			call board_set
 			pop bc
 			pop hl
-@oob:
+		@oob:
 			inc iy
 			inc c
 			pop de
 
 			dec e
-			ld a,e
-			or a
 			jr nz,@xloop
 
 			ld a,c
@@ -152,8 +146,6 @@ board_erase_shape: ; board(hl), shape(de), offset_x(c), offset_y(b)
 			inc b
 
 			dec d
-			ld a,d
-			or a
 			jr nz,@yloop
 
 		pop iy
@@ -172,9 +164,9 @@ board_shape_collide:  ; board(hl), shape(de), offset_x(c), offset_y(b) -> carry 
 		pop iy
 
 		ld d,4
-@yloop:
+	@yloop:
 		ld e,4
-@xloop:
+		@xloop:
 			push de
 
 			; tile from shape
@@ -196,14 +188,12 @@ board_shape_collide:  ; board(hl), shape(de), offset_x(c), offset_y(b) -> carry 
 
 			cp ' '
 			jp nz,_board_shape_collide_collision
-@skip:
+		@skip:
 			inc iy
 			inc c
 			pop de
 
 			dec e
-			ld a,e
-			or a
 			jr nz,@xloop
 
 		ld a,c
@@ -212,8 +202,6 @@ board_shape_collide:  ; board(hl), shape(de), offset_x(c), offset_y(b) -> carry 
 		inc b
 
 		dec d
-		ld a,d
-		or a
 		jr nz,@yloop
 
 		pop iy

@@ -1,8 +1,14 @@
 		.assume adl=0
+
+		org 0
+header:
+		jp start
+		align $40
+		db "MOS"
+		db 0 ; version
+		db 0 ; ADL disabled
+
 		include "agon_z80_helpers.asm"
-
-		mos_header start
-
 		include "mem.asm"
 		include "shape.asm"
 		include "board.asm"
@@ -22,11 +28,11 @@ start:
 		puts "\r\n\r\nPassed!\r\n"
 		col_white
 		jr @exit
-@failed:
+	@failed:
 		col_red
 		puts "\r\n\r\nFailed.\r\n"
 		col_white
-@exit:
+	@exit:
 		ld hl,0
 		pop.lil iy
 		ret.lis
@@ -113,10 +119,10 @@ test_board:
 		putc 10
 		ld hl,@_b
 		ld b,board_height
-@loopy:
+	@loopy:
 		push bc
 		ld b,board_width
-@loopx:
+	@loopx:
 			ld a,(hl)
 			inc hl
 			rst.lis 0x10
@@ -161,13 +167,13 @@ test_board:
 		
 		xor a
 		ret
-@fail:
+	@fail:
 		xor a
 		ccf
 		ret
-@_s:		ds sizeof_Shape
-@_b:		ds sizeof_Board
-@_c: 	db "          "
+	@_s:		ds sizeof_Shape
+	@_b:		ds sizeof_Board
+	@_c: 	db "          "
 		db "          "
 		db "          "
 		db "          "
@@ -234,14 +240,14 @@ test_shape:
 		
 		xor a
 		ret
-@_s: ds sizeof_Shape
-@_t: ds sizeof_Shape
-@_u: db 1
+	@_s: ds sizeof_Shape
+	@_t: ds sizeof_Shape
+	@_u: db 1
 		db "    "
 		db "222 "
 		db "2   "
 		db "    "
-@_v: db 0
+	@_v: db 0
 		db "    "
 		db "1111"
 		db "    "

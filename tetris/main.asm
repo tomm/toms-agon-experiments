@@ -15,6 +15,9 @@ header:
 		include "splash.asm"
 
 start:
+		; call this first, to store entry ssp so z8s_exit_to_mos works
+		call z8s_init
+
 		push.lil ix
 		push.lil iy
 		call main

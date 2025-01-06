@@ -16,7 +16,7 @@ shape_rot90: ; src(hl), dest(de)
 		or a
 		jp z, @is4x4
 		ld ix,@rot3x3map
-@is4x4:
+	@is4x4:
 		; copy sz byte
 		ld a,(hl)
 		ld (de),a
@@ -24,7 +24,7 @@ shape_rot90: ; src(hl), dest(de)
 		inc de
 		ex de,hl
 		ld b,16
-@loop:
+	@loop:
 		push bc
 			ld b,0
 			ld c,(ix+0)
@@ -41,12 +41,12 @@ shape_rot90: ; src(hl), dest(de)
 		pop iy
 		pop ix
 		ret
-@rot3x3map:
+	@rot3x3map:
 		db 2,6,10,3
 		db 1,5,9,7
 		db 0,4,8,11
 		db 12,13,14,15
-@rot4x4map:
+	@rot4x4map:
 		db 3,7,11,15
 		db 2,6,10,14
 		db 1,5,9,13
@@ -61,43 +61,43 @@ shape_shapes:
 	dw @shape4
 	dw @shape5
 	dw @shape6
-@shape0:
+	@shape0:
 	db 0
 	db "    "
 	db " 00 "
 	db " 00 "
 	db "    "
-@shape1:
+	@shape1:
 	db 0
 	db " 1  "
 	db " 1  "
 	db " 1  "
 	db " 1  "
-@shape2:
+	@shape2:
 	db 1
 	db " 2  "
 	db " 2  "
 	db " 22 "
 	db "    "
-@shape3:
+	@shape3:
 	db 1
 	db " 3  "
 	db "333 "
 	db "    "
 	db "    "
-@shape4:
+	@shape4:
 	db 1
 	db " 4  "
 	db " 4  "
 	db "44  "
 	db "    "
-@shape5:
+	@shape5:
 	db 1
 	db " 5  "
 	db "55  "
 	db "5   "
 	db "    "
-@shape6:
+	@shape6:
 	db 1
 	db " 6  "
 	db " 66 "
