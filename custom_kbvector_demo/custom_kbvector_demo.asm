@@ -93,48 +93,31 @@ setup_kb_handler:
 	pop bc
 	ret
 
-print_hexbyte:  ; print hex byte in `a`
+print_hexbyte:
 	push af
-	push bc
-	push de
-	push hl
-	ld b, a
-
-	; output high nibble as ascii hex
 	srl a
 	srl a
 	srl a
 	srl a
-	ld de,@hex_chr
-	ld hl,0
-	ld l,a
-	add hl,de
-	ld a,(hl)
-	rst.lil $10
-
-	; output low nibble as ascii hex
-	ld a, b
+	; print high nibble
+	call @print_hexnibble
+	pop af
 	and $f
-	ld de,@hex_chr
-	ld hl,0
-	ld l,a
-	add hl,de
-	ld a,(hl)
-	rst.lil $10
-
+	; print low nibble
+	call @print_hexnibble
 	; indent
 	ld b,8
 	ld a,' '
 @@:	rst.lil $10
 	djnz @b
-
-	pop hl
-	pop de
-	pop bc
-	pop af
 	ret
-@hex_chr:
-	.db "0123456789ABCDEF"
+@print_hexnibble:
+	add a, 48
+	cp 58
+	jr c, @f
+	add a, 7
+@@:	rst.lil $10
+	ret
 
 hello:
 	.db "Custom kbvector demo - escape to exit\r\n"
