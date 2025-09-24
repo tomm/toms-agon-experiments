@@ -30,7 +30,7 @@ else
     LINKER_EXIT=-defsym=_has_exit_handler=0
 endif
 LINKERFLAGS=--emit-relocs $(LINKER_ARG) $(LINKER_EXIT) -Map=$(BINDIR)/$(NAME).map -T $(LINKERCONFIG) --oformat elf32-z80 -o 
-LINKERLIBFLAGS=-L$(LIBDIR) -\( -l c -l agon -l crt -l fp -\) 
+LINKERLIBFLAGS=--nmagic -L$(LIBDIR) -\( -l c -l agon -l crt -l fp -\) 
 SETPROGNAME=$(TOOLBINDIR)/agondev-setname
 
 # project directories
