@@ -1371,6 +1371,8 @@ static int format_edit_status(void)
 	trunc_at = columns < STATUS_BUFFER_LEN-1 ?
 		columns : STATUS_BUFFER_LEN-1;
 
+	trunc_at = trunc_at > get_scr_cols() ? get_scr_cols() : trunc_at;
+
 	ret = snprintf(status_buffer, trunc_at+1,
 #if ENABLE_FEATURE_VI_READONLY
 		"%c %s%s%s%s %d/%d %d%%",
@@ -5100,6 +5102,8 @@ int main(int argc, char **argv)
 {
 	int opts;
 
+	platform_init();
+
 	memset(&_globals, 0, sizeof(struct globals));
 	last_modified_count--;
 	/* "" but has space for 2 chars: */
@@ -5196,6 +5200,8 @@ int main(int argc, char **argv)
 	}
 	// "Use normal screen buffer, restore cursor"
 	//write1(ESC"[?1049l");
+	
+	platform_deinit();
 
 	return 0;
 }

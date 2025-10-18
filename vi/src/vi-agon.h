@@ -3,7 +3,7 @@
 
 #include <mos_api.h>
 
-#define VI_VER "Agon VI v1.04 is based on Busybox VI"
+#define VI_VER "Agon VI v1.05 is based on Busybox VI"
 
 // this is just nonsense I made to get it to compile
 #define KEYCODE_UP 0x995
@@ -32,9 +32,23 @@
 #define isbackspace(c) ((c) == 0x7f)
 //#define isbackspace(c) ((c) == term_orig.c_cc[VERASE] || (c) == 8 || (c) == 127)
 
+// in keyboard_buffer.asm
+extern void kb_event_handler(void);
+extern uint8_t kb_buf_getch(void);
+
+static inline void platform_init()
+{
+	mos_setkbvector(&kb_event_handler, 0);
+}
+
+static inline void platform_deinit()
+{
+	mos_setkbvector(0, 0);
+}
+
 static inline int read_key()
 {
-	return getch();
+	return kb_buf_getch();
 }
 
 static inline int get_scr_cols() { return getsysvar_scrCols(); }
