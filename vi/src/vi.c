@@ -762,7 +762,7 @@ static void place_cursor(int row, int col)
 static void go_bottom_and_clear_to_eol(void)
 {
 	goto_xy(0, rows - 1);
-	for (int i=0; i<columns-1; i++) {
+	for (int i=0; i<columns-2; i++) {
 		putch(' ');
 	}
 	goto_xy(0, rows - 1);
@@ -1327,6 +1327,9 @@ static void Hit_Return(void)
 	standout_end();
 	while ((c = get_one_char()) != '\n' && c != '\r')
 		continue;
+	// truncate status line so after hitting return
+	// the remaining (redrawn) status line is not too long
+	status_buffer[columns-1] = 0;
 	redraw(TRUE);		// force redraw all
 }
 
@@ -1371,7 +1374,7 @@ static int format_edit_status(void)
 	trunc_at = columns < STATUS_BUFFER_LEN-1 ?
 		columns : STATUS_BUFFER_LEN-1;
 
-	trunc_at = trunc_at > get_scr_cols() ? get_scr_cols() : trunc_at;
+	trunc_at = trunc_at >= get_scr_cols()-1 ? get_scr_cols() - 2 : trunc_at;
 
 	ret = snprintf(status_buffer, trunc_at+1,
 #if ENABLE_FEATURE_VI_READONLY

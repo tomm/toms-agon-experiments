@@ -1,9 +1,10 @@
 #ifndef VI_AGON_H
 #define VI_AGON_H
 
-#include <mos_api.h>
+#include <agon/mos.h>
+#include <agon/keyboard.h>
 
-#define VI_VER "Agon VI v1.05 is based on Busybox VI"
+#define VI_VER "Agon VI v1.06 is based on Busybox VI"
 
 // this is just nonsense I made to get it to compile
 #define KEYCODE_UP 0x995
@@ -32,23 +33,30 @@
 #define isbackspace(c) ((c) == 0x7f)
 //#define isbackspace(c) ((c) == term_orig.c_cc[VERASE] || (c) == 8 || (c) == 127)
 
-// in keyboard_buffer.asm
-extern void kb_event_handler(void);
-extern uint8_t kb_buf_getch(void);
+// Note the buffer includes key-up events, so will want twice as long as needed
+#define KEY_EVENT_BUF_LEN 64
 
 static inline void platform_init()
 {
-	mos_setkbvector(&kb_event_handler, 0);
+	kbuf_init(KEY_EVENT_BUF_LEN);
 }
 
 static inline void platform_deinit()
 {
-	mos_setkbvector(0, 0);
+	kbuf_deinit();
 }
 
 static inline int read_key()
 {
-	return kb_buf_getch();
+	struct keyboard_event_t e;
+	memset(&e, 0, sizeof(struct keyboard_event_t));
+
+	while(!e.ascii || !e.isdown) {
+		while (!kbuf_poll_event(&e)) {}
+		//printf("%x %x %x %x\r\n", e.ascii, e.kmod, e.vkey, e.isdown);
+	}
+
+	return e.ascii;
 }
 
 static inline int get_scr_cols() { return getsysvar_scrCols(); }
