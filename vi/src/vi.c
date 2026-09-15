@@ -1046,6 +1046,7 @@ static char* format_line(char *src /*, int li*/)
 		// have we gone past the end?
 		if (src < end) {
 			c = *src++;
+			if (Isprint(c)) goto just_dandy;
 			if (c == '\n')
 				break;
 			if ((c & 0x80) && !Isprint(c)) {
@@ -1067,6 +1068,7 @@ static char* format_line(char *src /*, int li*/)
 				}
 			}
 		}
+just_dandy:
 		dest[co++] = c;
 		// discard scrolled-off-to-the-left portion,
 		// in tabstop-sized pieces
@@ -1095,11 +1097,11 @@ static char* format_line(char *src /*, int li*/)
 // if the current screenline is different from the new buffer.
 // If they differ then that line needs redrawing on the terminal.
 //
-static void refresh(int full_screen)
+static void refresh(bool full_screen)
 {
 #define old_offset refresh__old_offset
 
-	int li, changed;
+	int li;
 	char *tp, *sp;		// pointer into text[] and screen[]
 
 #if 0
@@ -1122,7 +1124,6 @@ static void refresh(int full_screen)
 
 	// compare text[] to screen[] and mark screen[] lines that need updating
 	if (need_buffer_redraw) for (li = 0; li < rows - 1; li++) {
-		int cs, ce;				// column start & end
 		char *out_buf;
 		// format current text line
 		out_buf = format_line(tp /*, li*/);
@@ -1135,49 +1136,26 @@ static void refresh(int full_screen)
 		}
 
 		// see if there are any changes between virtual screen and out_buf
-		changed = FALSE;	// assume no change
-		cs = 0;
-		ce = columns - 1;
 		sp = &screen[li * columns];	// start of screen line
 		if (full_screen) {
 			// force re-draw of every single column from 0 - columns-1
-			goto re0;
-		}
-		// compare newly formatted buffer with virtual screen
-		// look forward for first difference between buf and screen
-		for (; cs <= ce; cs++) {
-			if (out_buf[cs] != sp[cs]) {
-				changed = TRUE;	// mark for redraw
-				break;
+			place_cursor(li, 0);
+			for (int co=0; co<columns; co++) {
+				const char c = out_buf[co];
+				sp[co] = c;
+				platform_putch(c);
 			}
-		}
-
-		// look backward for last difference between out_buf and screen
-		for (; ce >= cs; ce--) {
-			if (out_buf[ce] != sp[ce]) {
-				changed = TRUE;	// mark for redraw
-				break;
+		} else {
+			int term_col = -1;
+			for (int co=0; co<columns; co++) {
+				const char c = out_buf[co];
+				if (c != sp[co]) {
+					sp[co] = c;
+					if (term_col != co) place_cursor(li, co);
+					platform_putch(c);
+					term_col = co+1;
+				}
 			}
-		}
-		// now, cs is index of first diff, and ce is index of last diff
-
-		// if horz offset has changed, force a redraw
-		if (offset != old_offset) {
- re0:
-			changed = TRUE;
-		}
-
-		// make a sanity check of columns indexes
-		if (cs < 0) cs = 0;
-		if (ce > columns - 1) ce = columns - 1;
-		if (cs > ce) { cs = 0; ce = columns - 1; }
-		// is there a change between virtual screen and out_buf
-		if (changed) {
-			// copy changed part of buffer to virtual screen
-			memcpy(sp+cs, out_buf+cs, ce-cs+1);
-			place_cursor(li, cs);
-			// write line out to terminal
-			platform_write_stdout(&sp[cs], ce - cs + 1);
 		}
 	}
 
