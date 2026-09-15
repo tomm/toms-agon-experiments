@@ -46,6 +46,24 @@ static inline void platform_deinit()
 	kbuf_deinit();
 }
 
+static inline void platform_putch(char c)
+{
+	putch(c);
+}
+
+static inline void platform_cursor_right(void)
+{
+	putch(9);
+}
+
+static inline void platform_write_stdout(const char *out, int len)
+{
+	while (len--) {
+		putch(*out);
+		out++;
+	}
+}
+
 static inline int read_key()
 {
 	struct keyboard_event_t e;

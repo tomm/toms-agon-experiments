@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <ctype.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -20,6 +21,7 @@
 # include <regex.h>
 #endif
 
+static bool need_buffer_redraw;
 //
 //Things To Do:
 //	./.exrc
@@ -32,8 +34,8 @@
 //	":r !cmd"  and  "!cmd"  to filter text through an external command
 //	An "ex" line oriented mode- maybe using "cmdedit"
 
-#define FALSE 0
-#define TRUE 1
+#define FALSE false
+#define TRUE true
 #define xzalloc(s) calloc(s,1)
 #define ARRAY_SIZE(x) ((unsigned)(sizeof(x) / sizeof((x)[0])))
 #define ALIGN1
@@ -691,8 +693,7 @@ static inline bool file_exists(const char *filename) {
 
 static void write1(const char *out)
 {
-	fwrite(out, 1, strlen(out), stdout);
-	//fputs_stdout(out);
+	platform_write_stdout(out, strlen(out));
 }
 
 #if ENABLE_FEATURE_VI_WIN_RESIZE
@@ -939,10 +940,13 @@ static void sync_cursor(char *d, int *row, int *col)
 
 	beg_cur = begin_line(d);	// first char of cur line
 
+#define VSCROLL_JUMP 0
 	if (beg_cur < screenbegin) {
 		// "d" is before top line on screen
+		need_buffer_redraw = true;
 		// how many lines do we have to move
 		cnt = count_lines(beg_cur, screenbegin);
+		cnt -= VSCROLL_JUMP;
  sc1:
 		screenbegin = beg_cur;
 		if (cnt > (rows - 1) / 2) {
@@ -955,9 +959,11 @@ static void sync_cursor(char *d, int *row, int *col)
 		char *end_scr;	// begin and end of screen
 		end_scr = end_screen();	// last char of screen
 		if (beg_cur > end_scr) {
+			need_buffer_redraw = true;
 			// "d" is after bottom line on screen
 			// how many lines do we have to move
 			cnt = count_lines(end_scr, beg_cur);
+			cnt += VSCROLL_JUMP;
 			if (cnt > (rows - 1) / 2)
 				goto sc1;	// too many lines
 			for (ro = 0; ro < cnt - 1; ro++) {
@@ -1002,17 +1008,23 @@ static void sync_cursor(char *d, int *row, int *col)
 	// If "co" is outside this range then we have to change "offset".
 	// If the first char of a line is a tab the cursor will try to stay
 	//  in column 7, but we have to set offset to 0.
-
+#define HSCROLL_JUMP 10
 	if (co < 0 + offset) {
-		offset = co;
+		offset = co - HSCROLL_JUMP;
+		if (offset < 0) offset = 0;
+		need_buffer_redraw = true;
 	}
 	if (co >= columns + offset) {
-		offset = co - columns + 1;
+		offset = co - columns + HSCROLL_JUMP;
+		need_buffer_redraw = true;
 	}
+#undef HSCROLL_JUMP
+
 	// if the first char of the line is a tab, and "dot" is sitting on it
 	//  force offset to 0.
 	if (d == beg_cur && *d == '\t') {
 		offset = 0;
+		need_buffer_redraw = true;
 	}
 	co -= offset;
 
@@ -1109,7 +1121,7 @@ static void refresh(int full_screen)
 	tp = screenbegin;	// index into text[] of top line
 
 	// compare text[] to screen[] and mark screen[] lines that need updating
-	for (li = 0; li < rows - 1; li++) {
+	if (need_buffer_redraw) for (li = 0; li < rows - 1; li++) {
 		int cs, ce;				// column start & end
 		char *out_buf;
 		// format current text line
@@ -1165,7 +1177,7 @@ static void refresh(int full_screen)
 			memcpy(sp+cs, out_buf+cs, ce-cs+1);
 			place_cursor(li, cs);
 			// write line out to terminal
-			fwrite(&sp[cs], ce - cs + 1, 1, stdout);
+			platform_write_stdout(&sp[cs], ce - cs + 1);
 		}
 	}
 
@@ -1179,12 +1191,13 @@ static void refresh(int full_screen)
 }
 
 //----- Force refresh of all Lines -----------------------------
-static void redraw(int full_screen)
+static void redraw(bool full_screen)
 {
 	// cursor to top,left; clear to the end of screen
 	write1(ESC_SET_CURSOR_TOPLEFT ESC_CLEAR2EOS);
 	screen_erase();		// erase the internal screen buffer
 	last_status_cksum = 0;	// force status update
+	if (full_screen) need_buffer_redraw = true;
 	refresh(full_screen);	// this will redraw the entire display
 	show_status_line();
 }
@@ -1407,6 +1420,8 @@ static int bufsum(char *buf, int count)
 	return sum;
 }
 
+static char status_frontbuf[80];
+
 static void show_status_line(void)
 {
 	int cnt = 0, cksum = 0;
@@ -1419,8 +1434,19 @@ static void show_status_line(void)
 	}
 	if (have_status_msg || ((cnt > 0 && last_status_cksum != cksum))) {
 		last_status_cksum = cksum;		// remember if we have seen this line
-		go_bottom_and_clear_to_eol();
-		write1(status_buffer);
+		goto_xy(0, rows - 1);
+
+		for (uint8_t i=0; i<sizeof(status_frontbuf) && i < columns-2; i++) {
+			const char c = status_buffer[i];
+			if (status_frontbuf[i] != c) {
+				status_frontbuf[i] = c;
+				platform_putch(c);
+			} else {
+				platform_cursor_right();
+			}
+		}
+		//go_bottom_and_clear_to_eol();
+		//write1(status_buffer);
 		if (have_status_msg) {
 			if (((int)strlen(status_buffer) - (have_status_msg - 1)) >
 					(columns - 1) ) {
@@ -1706,6 +1732,9 @@ static void undo_push(char *src, unsigned length, int u_type)
 	int use_spos = u_type & UNDO_USE_SPOS;
 # endif
 
+	// Handy assumption that an edit happened
+	need_buffer_redraw = true;
+
 	// "u_type" values
 	// UNDO_INS: insertion, undo will remove from buffer
 	// UNDO_DEL: deleted text, undo will restore to buffer
@@ -1823,6 +1852,9 @@ static void undo_pop(void)
 	int repeat;
 	char *u_start, *u_end;
 	struct undo_object *undo_entry;
+
+	// Handy assumption that an edit happened
+	need_buffer_redraw = true;
 
 	// Commit pending undo queue before popping (should be unnecessary)
 	undo_queue_commit();
@@ -1980,6 +2012,8 @@ static void dot_to_char(int cmd)
 static void dot_scroll(int cnt, int dir)
 {
 	char *q;
+
+	need_buffer_redraw = true;
 
 	undo_queue_commit();
 	for (; cnt > 0; cnt--) {
@@ -2194,10 +2228,12 @@ static uintptr_t stupid_insert(char *p, char c) // stupidly insert the char c at
 	return bias;
 }
 
+/*
 static int isblank(char c)
 {
 	return c == ' ' || c == '\t';
 }
+*/
 
 // find number of characters in indent, p must be at beginning of line
 static size_t indent_len(char *p)
@@ -3842,6 +3878,8 @@ static void do_cmd(int c)
 	int undo_del = UNDO_DEL;
 #endif
 
+	need_buffer_redraw = false;
+
 //	c1 = c; // quiet the compiler
 //	cnt = yf = 0; // quiet the compiler
 //	p = q = save_dot = buf; // quiet the compiler
@@ -5018,6 +5056,7 @@ static void edit_file(char *fn)
 	while (initial_cmds)
 		run_cmds((char *)llist_pop(&initial_cmds));
 #endif
+	need_buffer_redraw = true;
 	redraw(FALSE);			// dont force every col re-draw
 	//------This is the main Vi cmd handling loop -----------------------
 	while (editing > 0) {
