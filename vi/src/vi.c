@@ -253,13 +253,13 @@ typedef int smallint;
 #endif
 
 enum {
-	MAX_TABSTOP = 32, // sanity limit
+	MAX_TABSTOP = 8, // sanity limit
 	// User input len. Need not be extra big.
 	// Lines in file being edited *can* be bigger than this.
 	MAX_INPUT_LEN = 128,
 	// Sanity limits. We have only one buffer of this size.
-	MAX_SCR_COLS = CONFIG_FEATURE_VI_MAX_LEN,
-	MAX_SCR_ROWS = CONFIG_FEATURE_VI_MAX_LEN,
+	MAX_SCR_COLS = 240,
+	MAX_SCR_ROWS = 256,
 };
 
 // VT102 ESC sequences.
@@ -332,7 +332,6 @@ typedef struct llist_t {
 // busybox build system provides that, but it's better
 // to audit and fix the source
 
-struct globals {
 	// many references - keep near the top of globals
 	char *text, *end;       // pointers to the user data in memory
 	char *dot;              // where all the action takes place
@@ -374,6 +373,7 @@ struct globals {
 #define SET_READONLY_MODE(flags)        ((flags) |= 0x02)
 #define UNSET_READONLY_FILE(flags)      ((flags) &= 0xfe)
 #else
+#define readonly_mode 0
 #define SET_READONLY_FILE(flags)        ((void)0)
 #define SET_READONLY_MODE(flags)        ((void)0)
 #define UNSET_READONLY_FILE(flags)      ((void)0)
@@ -387,7 +387,8 @@ struct globals {
 	int cmdline_filecnt;     // how many file names on cmd line
 	int cmdcnt;              // repetition count
 	char *rstart;            // start of text in Replace mode
-	unsigned rows, columns;	 // the terminal screen is this size
+	uint8_t rows;
+	uint8_t columns;	 // the terminal screen is this size
 #if ENABLE_FEATURE_VI_ASK_TERMINAL
 	int get_rowcol_error;
 #endif
@@ -403,7 +404,7 @@ struct globals {
 	char *screenbegin;       // index into text[], of top line on the screen
 	char *screen;            // pointer to the virtual screen buffer
 	int screensize;          //            and its size
-	int tabstop;
+	uint8_t tabstop;
 	int last_search_char;    // last char searched for (int because of Unicode)
 	smallint last_search_cmd;    // command used to invoke last char search
 #if ENABLE_FEATURE_VI_CRASHME
@@ -506,96 +507,6 @@ struct globals {
 	char undo_queue[CONFIG_FEATURE_VI_UNDO_QUEUE_MAX];
 # endif
 #endif /* ENABLE_FEATURE_VI_UNDO */
-};
-
-struct globals _globals;
-struct globals *ptr_to_globals = &_globals;
-#define G (*ptr_to_globals)
-#define text           (G.text          )
-#define text_size      (G.text_size     )
-#define end            (G.end           )
-#define dot            (G.dot           )
-#define reg            (G.reg           )
-#define is_crlf        (G.is_crlf       )
-
-#define vi_setops               (G.vi_setops          )
-#define editing                 (G.editing            )
-#define cmd_mode                (G.cmd_mode           )
-#define modified_count          (G.modified_count     )
-#define last_modified_count     (G.last_modified_count)
-#define cmdline_filecnt         (G.cmdline_filecnt    )
-#define cmdcnt                  (G.cmdcnt             )
-#define rstart                  (G.rstart             )
-#define rows                    (G.rows               )
-#define columns                 (G.columns            )
-#define crow                    (G.crow               )
-#define ccol                    (G.ccol               )
-#define offset                  (G.offset             )
-#define status_buffer           (G.status_buffer      )
-#define have_status_msg         (G.have_status_msg    )
-#define last_status_cksum       (G.last_status_cksum  )
-#define current_filename        (G.current_filename   )
-#define alt_filename            (G.alt_filename       )
-#define screen                  (G.screen             )
-#define screensize              (G.screensize         )
-#define screenbegin             (G.screenbegin        )
-#define tabstop                 (G.tabstop            )
-#define last_search_char        (G.last_search_char   )
-#define last_search_cmd         (G.last_search_cmd    )
-#if ENABLE_FEATURE_VI_CRASHME
-#define last_input_char         (G.last_input_char    )
-#endif
-#if ENABLE_FEATURE_VI_READONLY
-#define readonly_mode           (G.readonly_mode      )
-#else
-#define readonly_mode           0
-#endif
-#define adding2q                (G.adding2q           )
-#define lmc_len                 (G.lmc_len            )
-#define ioq                     (G.ioq                )
-#define ioq_start               (G.ioq_start          )
-#define dotcnt                  (G.dotcnt             )
-#define last_search_pattern     (G.last_search_pattern)
-#define char_insert__indentcol  (G.char_insert__indentcol)
-#define newindent               (G.newindent          )
-#define cmd_error               (G.cmd_error          )
-
-#define edit_file__cur_line     (G.edit_file__cur_line)
-#define refresh__old_offset     (G.refresh__old_offset)
-#define format_edit_status__tot (G.format_edit_status__tot)
-
-#define YDreg          (G.YDreg         )
-//#define Ureg           (G.Ureg          )
-#define regtype        (G.regtype       )
-#define mark           (G.mark          )
-#define restart        (G.restart       )
-#define term_orig      (G.term_orig     )
-#define cindex         (G.cindex        )
-#define keep_index     (G.keep_index    )
-#define initial_cmds   (G.initial_cmds  )
-#define readbuffer     (G.readbuffer    )
-#define scr_out_buf    (G.scr_out_buf   )
-#define last_modifying_cmd  (G.last_modifying_cmd )
-#define get_input_line__buf (G.get_input_line__buf)
-
-#if ENABLE_FEATURE_VI_UNDO
-#define undo_stack_tail  (G.undo_stack_tail )
-# if ENABLE_FEATURE_VI_UNDO_QUEUE
-#define undo_queue_state (G.undo_queue_state)
-#define undo_q           (G.undo_q          )
-#define undo_queue       (G.undo_queue      )
-#define undo_queue_spos  (G.undo_queue_spos )
-# endif
-#endif
-
-#define INIT_G() do { \
-	SET_PTR_TO_GLOBALS(xzalloc(sizeof(G))); \
-	last_modified_count--; \
-	/* "" but has space for 2 chars: */ \
-	last_search_pattern = xzalloc(2); \
-	tabstop = 8; \
-	IF_FEATURE_VI_SETOPTS(newindent--;) \
-} while (0)
 
 #if ENABLE_FEATURE_VI_CRASHME
 static int crashme = 0;
@@ -1036,9 +947,9 @@ static void sync_cursor(char *d, int *row, int *col)
 static char* format_line(char *src /*, int li*/)
 {
 	unsigned char c;
-	int co;
-	int ofs = offset;
-	char *dest = scr_out_buf; // [MAX_SCR_COLS + MAX_TABSTOP * 2]
+	uint8_t co;
+	uint8_t ofs = offset;
+	char *dest = scr_out_buf; // [MAX_SCR_COLS + MAX_TABSTOP * 2] -- happens to be 256 as configured here
 
 	c = '~'; // char in col 0 in non-existent lines is '~'
 	co = 0;
@@ -1101,7 +1012,7 @@ static void refresh(bool full_screen)
 {
 #define old_offset refresh__old_offset
 
-	int li;
+	uint8_t li;
 	char *tp, *sp;		// pointer into text[] and screen[]
 
 #if 0
@@ -1140,14 +1051,14 @@ static void refresh(bool full_screen)
 		if (full_screen) {
 			// force re-draw of every single column from 0 - columns-1
 			place_cursor(li, 0);
-			for (int co=0; co<columns; co++) {
+			for (uint8_t co=0; co<columns; co++) {
 				const char c = out_buf[co];
 				sp[co] = c;
 				platform_putch(c);
 			}
 		} else {
-			int term_col = -1;
-			for (int co=0; co<columns; co++) {
+			uint8_t term_col = 255;
+			for (uint8_t co=0; co<columns; co++) {
 				const char c = out_buf[co];
 				if (c != sp[co]) {
 					sp[co] = c;
@@ -5124,7 +5035,6 @@ int main(int argc, char **argv)
 
 	platform_init();
 
-	memset(&_globals, 0, sizeof(struct globals));
 	last_modified_count--;
 	/* "" but has space for 2 chars: */
 	last_search_pattern = xzalloc(2);
