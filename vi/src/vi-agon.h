@@ -4,7 +4,7 @@
 #include <agon/mos.h>
 #include <agon/keyboard.h>
 
-#define VI_VER "Agon VI v1.06 is based on Busybox VI"
+#define VI_VER "Agon VI v1.07 is based on Busybox VI"
 
 // this is just nonsense I made to get it to compile
 #define KEYCODE_UP 0x995
@@ -39,6 +39,8 @@
 static inline void platform_init()
 {
 	kbuf_init(KEY_EVENT_BUF_LEN);
+	// set scroll protection so bottom-right character can be written to without causing scroll
+	putch(23); putch(16); putch(1), putch(0xfe);
 }
 
 static inline void platform_deinit()
@@ -54,6 +56,20 @@ static inline void platform_putch(char c)
 static inline void platform_cursor_right(void)
 {
 	putch(9);
+}
+
+static inline void platform_text_highlight(void)
+{
+	if (getsysvar_scrColours() > 2) {
+		putch(17); putch(129);
+	}
+}
+
+static inline void platform_text_normal(void)
+{
+	if (getsysvar_scrColours() > 2) {
+		putch(17); putch(128);
+	}
 }
 
 static inline void platform_write_stdout(const char *out, int len)

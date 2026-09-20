@@ -674,8 +674,8 @@ static void place_cursor(int row, int col)
 static void go_bottom_and_clear_to_eol(void)
 {
 	goto_xy(0, rows - 1);
-	for (int i=0; i<columns-2; i++) {
-		putch(' ');
+	for (uint8_t i=0; i<columns; i++) {
+		platform_putch(' ');
 	}
 	goto_xy(0, rows - 1);
 }
@@ -1282,24 +1282,33 @@ static void format_edit_status(void)
 	trunc_at = columns < STATUS_BUFFER_LEN-1 ?
 		columns : STATUS_BUFFER_LEN-1;
 
-	trunc_at = trunc_at >= get_scr_cols()-1 ? get_scr_cols() - 1 : trunc_at;
+	trunc_at = trunc_at >= get_scr_cols() ? get_scr_cols() : trunc_at;
 
 	ret = snprintf(status_buffer, trunc_at+1,
 #if ENABLE_FEATURE_VI_READONLY
-		"%c %s%s%s%s %d/%d %d%%",
+		"%c %s %d/%d %d%%%s%s%s",
 #else
-		"%c %s%s%s %d/%d %d%%",
+		"%c %s %d/%d %d%%%s%s",
 #endif
 		cmd_mode_indicator[cmd_mode & 3],
 		(current_filename != NULL ? current_filename : "No file"),
+		cur, tot, percent,
 #if ENABLE_FEATURE_VI_READONLY
 		(readonly_mode ? " [Readonly]" : ""),
 #endif
 		(is_crlf ? " [DOS]" : " [UNIX]"),
-		(modified_count ? " [Modified]" : ""),
-		cur, tot, percent);
+		(modified_count ? " [Modified]" : ""));
 
 #undef tot
+}
+
+static void space_pad_to(char *buf, int len)
+{
+		int end = strlen(buf);
+		while (end < len) {
+			status_buffer[end++] = ' ';
+		}
+		status_buffer[end] = 0;
 }
 
 static void show_status_line(void)
@@ -1307,7 +1316,11 @@ static void show_status_line(void)
 	if (have_status_msg) {
 		// special message
 		goto_xy(0, rows - 1);
+		space_pad_to(status_buffer, columns-1);
+
+		platform_text_highlight();
 		write1(status_buffer);
+		platform_text_normal();
 
 		if (((int)strlen(status_buffer) - (have_status_msg - 1)) >
 				(columns - 1) ) {
@@ -1315,6 +1328,7 @@ static void show_status_line(void)
 			Hit_Return();
 		}
 		have_status_msg = 0;
+		force_redraw_status_line = true;
 	} else {
 		// default status message
 		format_edit_status();
@@ -1328,12 +1342,11 @@ static void show_status_line(void)
 
 		// draw_screenline_diff requires status_buffer to extend (space-padded) to all columns
 		int status_len = strlen(status_buffer);
-		while (status_len < columns-1) {
-			status_buffer[status_len++] = ' ';
-		}
-		status_buffer[status_len] = 0;
+		space_pad_to(status_buffer, columns);
 
+		platform_text_highlight();
 		draw_screenline_diff(rows-1, status_buffer);
+		platform_text_normal();
 	}
 	place_cursor(crow, ccol);  // put cursor back in correct place
 }
