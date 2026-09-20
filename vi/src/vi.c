@@ -396,7 +396,7 @@ typedef struct llist_t {
 	int offset;              // chars scrolled off the screen to the left
 	int have_status_msg;     // is default edit status needed?
 	                         // [don't make smallint!]
-	int last_status_cksum;   // hash of current status line
+	bool force_redraw_status_line;
 	char *current_filename;
 #if ENABLE_FEATURE_VI_COLON_EXPAND
 	char *alt_filename;
@@ -1090,7 +1090,7 @@ static void redraw(bool full_screen)
 	// cursor to top,left; clear to the end of screen
 	write1(ESC_SET_CURSOR_TOPLEFT ESC_CLEAR2EOS);
 	screen_erase();		// erase the internal screen buffer
-	last_status_cksum = 0;	// force status update
+	force_redraw_status_line = true;	// force status update
 	if (full_screen) need_buffer_redraw = true;
 	refresh(full_screen);	// this will redraw the entire display
 	show_status_line();
@@ -1192,7 +1192,6 @@ static char *get_input_line(const char *prompt)
 	int i;
 
 	strcpy(buf, prompt);
-	last_status_cksum = 0;	// force status update
 	go_bottom_and_clear_to_eol();
 	write1(buf);      // write out the :, /, or ? prompt
 
@@ -1220,7 +1219,9 @@ static char *get_input_line(const char *prompt)
 			putchar(c);
 		}
 	}
+
 	refresh(FALSE);
+	force_redraw_status_line = true;	// force status update
 	return buf;
 #undef buf
 }
@@ -1242,7 +1243,7 @@ static void Hit_Return(void)
 
 //----- Draw the status line at bottom of the screen -------------
 // show file status on status line
-static int format_edit_status(void)
+static void format_edit_status(void)
 {
 	static const char cmd_mode_indicator[5] = "-IR-";
 
@@ -1281,7 +1282,7 @@ static int format_edit_status(void)
 	trunc_at = columns < STATUS_BUFFER_LEN-1 ?
 		columns : STATUS_BUFFER_LEN-1;
 
-	trunc_at = trunc_at >= get_scr_cols()-1 ? get_scr_cols() - 2 : trunc_at;
+	trunc_at = trunc_at >= get_scr_cols()-1 ? get_scr_cols() - 1 : trunc_at;
 
 	ret = snprintf(status_buffer, trunc_at+1,
 #if ENABLE_FEATURE_VI_READONLY
@@ -1298,57 +1299,43 @@ static int format_edit_status(void)
 		(modified_count ? " [Modified]" : ""),
 		cur, tot, percent);
 
-	if (ret >= 0 && ret < trunc_at)
-		return ret;  // it all fit
-
-	return trunc_at;  // had to truncate
 #undef tot
-}
-
-static int bufsum(char *buf, int count)
-{
-	int sum = 0;
-	char *e = buf + count;
-	while (buf < e)
-		sum += (unsigned char) *buf++;
-	return sum;
 }
 
 static void show_status_line(void)
 {
-	int cnt = 0, cksum = 0;
+	if (have_status_msg) {
+		// special message
+		goto_xy(0, rows - 1);
+		write1(status_buffer);
 
-	// either we already have an error or status message, or we
-	// create one.
-	if (!have_status_msg) {
-		cnt = format_edit_status();
-		cksum = bufsum(status_buffer, cnt);
-	}
-
-	if (have_status_msg || ((cnt > 0 && last_status_cksum != cksum))) {
-		last_status_cksum = cksum;		// remember if we have seen this line
+		if (((int)strlen(status_buffer) - (have_status_msg - 1)) >
+				(columns - 1) ) {
+			have_status_msg = 0;
+			Hit_Return();
+		}
+		have_status_msg = 0;
+	} else {
+		// default status message
+		format_edit_status();
+	
+		if (force_redraw_status_line) {
+			// Clear last line of screen buffer, as it's been stomped.
+			// This is cause a status line redraw
+			memset(&screen[(rows-1) * columns], 0, columns);
+			force_redraw_status_line = false;
+		}
 
 		// draw_screenline_diff requires status_buffer to extend (space-padded) to all columns
 		int status_len = strlen(status_buffer);
-		while (status_len < columns) {
+		while (status_len < columns-1) {
 			status_buffer[status_len++] = ' ';
 		}
 		status_buffer[status_len] = 0;
 
 		draw_screenline_diff(rows-1, status_buffer);
-
-		//go_bottom_and_clear_to_eol();
-		//write1(status_buffer);
-		if (have_status_msg) {
-			if (((int)strlen(status_buffer) - (have_status_msg - 1)) >
-					(columns - 1) ) {
-				have_status_msg = 0;
-				Hit_Return();
-			}
-			have_status_msg = 0;
-		}
-		place_cursor(crow, ccol);  // put cursor back in correct place
 	}
+	place_cursor(crow, ccol);  // put cursor back in correct place
 }
 
 //----- format the status buffer, the bottom line of screen ------
@@ -2165,7 +2152,7 @@ static char *char_insert(char *p, char c, int undo) // insert the char c at 'p'
 		undo_queue_commit();
 		cmdcnt = 0;
 		end_cmd_q();	// stop adding to q
-		last_status_cksum = 0;	// force status update
+		force_redraw_status_line = true;
 		if ((dot > text) && (p[-1] != '\n')) {
 			p--;
 		}
@@ -2905,7 +2892,7 @@ static void colon(char *buf)
 		return;
 	}
 	if (strncmp(p, "file", cnt) == 0) {
-		last_status_cksum = 0;	// force status update
+		force_redraw_status_line = true;
 		return;
 	}
 	if (sscanf(p, "%d", &cnt) > 0) {
@@ -3099,7 +3086,7 @@ static void colon(char *buf)
 			update_filename(exp);
 		} else {
 			// user wants file status info
-			last_status_cksum = 0;	// force status update
+			force_redraw_status_line = true;
 		}
 	} else if (strncmp(cmd, "features", i) == 0) {	// what features are available
 		// print out values of all features
@@ -3610,7 +3597,7 @@ static void tstp_handler(int sig UNUSED_PARAM)
 
 	// we have been "continued" with SIGCONT, restore screen and termios
 	rawmode(); // terminal to "raw"
-	last_status_cksum = 0; // force status update
+	force_redraw_status_line = true;
 	redraw(TRUE); // re-draw the screen
 
 	errno = save_errno;
@@ -3885,7 +3872,7 @@ static void do_cmd(int c)
 		dot_scroll(rows - 2, 1);
 		break;
 	case 7:			// ctrl-G  show current status
-		last_status_cksum = 0;	// force status update
+		force_redraw_status_line = true;
 		break;
 	case 'h':			// h- move left
 	case KEYCODE_LEFT:	// cursor key Left
@@ -3934,7 +3921,7 @@ static void do_cmd(int c)
 		cmd_mode = 0;	// stop inserting
 		undo_queue_commit();
 		end_cmd_q();
-		last_status_cksum = 0;	// force status update
+		force_redraw_status_line = true;
 		break;
 	case ' ':			// move right
 	case 'l':			// move right
