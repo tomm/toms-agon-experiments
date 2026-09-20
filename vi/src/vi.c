@@ -404,7 +404,7 @@ typedef struct llist_t {
 	char *screenbegin;       // index into text[], of top line on the screen
 	char *screen;            // pointer to the virtual screen buffer
 	int screensize;          //            and its size
-	uint8_t tabstop;
+#define tabstop 8
 	int last_search_char;    // last char searched for (int because of Unicode)
 	smallint last_search_cmd;    // command used to invoke last char search
 #if ENABLE_FEATURE_VI_CRASHME
@@ -5038,7 +5038,6 @@ int main(int argc, char **argv)
 	last_modified_count--;
 	/* "" but has space for 2 chars: */
 	last_search_pattern = xzalloc(2);
-	tabstop = 8;
 	//IF_FEATURE_VI_SETOPTS(newindent--;)
 
 #if ENABLE_FEATURE_VI_UNDO
