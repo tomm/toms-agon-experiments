@@ -1143,10 +1143,10 @@ static int get_one_char(void)
 			ioq_start = NULL;
 			// read from STDIN:
 		}
-		return read_key();
+		return platform_read_key();
 	}
 	// we are adding STDIN chars to q.
-	c = read_key();
+	c = platform_read_key();
 	if (lmc_len >= ARRAY_SIZE(last_modifying_cmd) - 2) {
 		// last_modifying_cmd[] is too small, can't remember the cmd
 		// - drop it
@@ -1158,7 +1158,7 @@ static int get_one_char(void)
 	return c;
 }
 #else
-# define get_one_char() read_key()
+# define get_one_char() platform_read_key()
 #endif
 
 // Get type of thing to operate on and adjust count

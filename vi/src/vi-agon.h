@@ -3,21 +3,20 @@
 
 #include <agon/mos.h>
 #include <agon/keyboard.h>
+#include "agon-vkey.h"
 
 #define VI_VER "Agon VI v1.07 is based on Busybox VI"
 
-// this is just nonsense I made to get it to compile
-#define KEYCODE_UP 0x995
-#define KEYCODE_RIGHT 0x996
-#define KEYCODE_DOWN 0x997
-#define KEYCODE_LEFT 0x998
-// getch() returns zero for all these..
-#define KEYCODE_HOME 0x999
-#define KEYCODE_END 0x99a
-#define KEYCODE_PAGEUP 0x99b
-#define KEYCODE_PAGEDOWN 0x99c
-#define KEYCODE_DELETE 0x99d
-#define KEYCODE_INSERT 0x99e
+#define KEYCODE_UP (VK_UP << 8)
+#define KEYCODE_RIGHT (VK_RIGHT << 8)
+#define KEYCODE_DOWN (VK_DOWN << 8)
+#define KEYCODE_LEFT (VK_LEFT << 8)
+#define KEYCODE_HOME (VK_HOME << 8)
+#define KEYCODE_END (VK_END << 8)
+#define KEYCODE_PAGEUP (VK_PAGEUP << 8)
+#define KEYCODE_PAGEDOWN (VK_PAGEDOWN << 8)
+#define KEYCODE_DELETE (VK_DELETE << 8)
+#define KEYCODE_INSERT (VK_INSERT << 8)
 
 #define ENABLE_FEATURE_ALLOW_EXEC 1
 #define ENABLE_FEATURE_VI_SEARCH 1
@@ -80,17 +79,35 @@ static inline void platform_write_stdout(const char *out, int len)
 	}
 }
 
-static inline int read_key()
+/**
+ * For ascii keys, return the ascii. For non ascii keys
+ * return the fabgl vkey<<8
+ */
+static inline int platform_read_key()
 {
 	struct keyboard_event_t e;
 	memset(&e, 0, sizeof(struct keyboard_event_t));
 
-	while(!e.ascii || !e.isdown) {
-		while (!kbuf_poll_event(&e)) {}
-		//printf("%x %x %x %x\r\n", e.ascii, e.kmod, e.vkey, e.isdown);
-	}
+	for (;;) {
+		while (!kbuf_poll_event(&e) || !e.isdown) {}
 
-	return e.ascii;
+		// allowlist a few non-ascii keys that vi handles
+		switch (e.vkey) {
+		case VK_UP:
+		case VK_RIGHT:
+		case VK_DOWN:
+		case VK_LEFT:
+		case VK_HOME:
+		case VK_END:
+		case VK_PAGEUP:
+		case VK_PAGEDOWN:
+		case VK_DELETE:
+		case VK_INSERT:
+			return ((int)e.vkey) << 8;
+		}
+
+		if (e.ascii) return e.ascii;
+	}
 }
 
 static inline int get_scr_cols() { return getsysvar_scrCols(); }
