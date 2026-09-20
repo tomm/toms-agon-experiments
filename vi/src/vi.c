@@ -1033,6 +1033,11 @@ static void refresh(bool full_screen)
 	sync_cursor(dot, &crow, &ccol);	// where cursor will be (on "dot")
 	tp = screenbegin;	// index into text[] of top line
 
+	// For a fullscreen refresh we just wipe the screen cache
+	if (full_screen) {
+		memset(screen, 0, screensize);
+	}
+
 	// compare text[] to screen[] and mark screen[] lines that need updating
 	if (need_buffer_redraw) for (li = 0; li < rows - 1; li++) {
 		char *out_buf;
@@ -1048,24 +1053,14 @@ static void refresh(bool full_screen)
 
 		// see if there are any changes between virtual screen and out_buf
 		sp = &screen[li * columns];	// start of screen line
-		if (full_screen) {
-			// force re-draw of every single column from 0 - columns-1
-			place_cursor(li, 0);
-			for (uint8_t co=0; co<columns; co++) {
-				const char c = out_buf[co];
+		uint8_t term_col = 255;
+		for (uint8_t co=0; co<columns; co++) {
+			const char c = out_buf[co];
+			if (c != sp[co]) {
 				sp[co] = c;
+				if (term_col != co) place_cursor(li, co);
 				platform_putch(c);
-			}
-		} else {
-			uint8_t term_col = 255;
-			for (uint8_t co=0; co<columns; co++) {
-				const char c = out_buf[co];
-				if (c != sp[co]) {
-					sp[co] = c;
-					if (term_col != co) place_cursor(li, co);
-					platform_putch(c);
-					term_col = co+1;
-				}
+				term_col = co+1;
 			}
 		}
 	}
