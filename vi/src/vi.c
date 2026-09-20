@@ -1003,6 +1003,26 @@ just_dandy:
 	return dest;
 }
 
+/**
+ * Draw changed characters to a screen line.
+ * Note that linenew should contain 'columns' characters,
+ * which must be padded with spaces as needed to fill all columns.
+ */
+static void draw_screenline_diff(uint8_t line, char *linenew) {
+	char *linecache = &screen[line * columns];
+	uint8_t term_col = 255;
+	for (uint8_t co=0; co<columns; co++) {
+		const char c = linenew[co];
+		// see if there are any changes between virtual screen (linecache) and linenew
+		if (c != linecache[co]) {
+			linecache[co] = c;
+			if (term_col != co) place_cursor(line, co);
+			platform_putch(c);
+			term_col = co+1;
+		}
+	}
+}
+
 //----- Refresh the changed screen lines -----------------------
 // Copy the source line from text[] into the buffer and note
 // if the current screenline is different from the new buffer.
@@ -1013,7 +1033,7 @@ static void refresh(bool full_screen)
 #define old_offset refresh__old_offset
 
 	uint8_t li;
-	char *tp, *sp;		// pointer into text[] and screen[]
+	char *tp;		// pointer into text[]
 
 #if 0
 	if (ENABLE_FEATURE_VI_WIN_RESIZE IF_FEATURE_VI_ASK_TERMINAL(&& !G.get_rowcol_error) ) {
@@ -1052,17 +1072,7 @@ static void refresh(bool full_screen)
 		}
 
 		// see if there are any changes between virtual screen and out_buf
-		sp = &screen[li * columns];	// start of screen line
-		uint8_t term_col = 255;
-		for (uint8_t co=0; co<columns; co++) {
-			const char c = out_buf[co];
-			if (c != sp[co]) {
-				sp[co] = c;
-				if (term_col != co) place_cursor(li, co);
-				platform_putch(c);
-				term_col = co+1;
-			}
-		}
+		draw_screenline_diff(li, out_buf);
 	}
 
 	place_cursor(crow, ccol);
@@ -1304,8 +1314,6 @@ static int bufsum(char *buf, int count)
 	return sum;
 }
 
-static char status_frontbuf[80];
-
 static void show_status_line(void)
 {
 	int cnt = 0, cksum = 0;
@@ -1316,19 +1324,19 @@ static void show_status_line(void)
 		cnt = format_edit_status();
 		cksum = bufsum(status_buffer, cnt);
 	}
+
 	if (have_status_msg || ((cnt > 0 && last_status_cksum != cksum))) {
 		last_status_cksum = cksum;		// remember if we have seen this line
-		goto_xy(0, rows - 1);
 
-		for (uint8_t i=0; i<sizeof(status_frontbuf) && i < columns-2; i++) {
-			const char c = status_buffer[i];
-			if (status_frontbuf[i] != c) {
-				status_frontbuf[i] = c;
-				platform_putch(c);
-			} else {
-				platform_cursor_right();
-			}
+		// draw_screenline_diff requires status_buffer to extend (space-padded) to all columns
+		int status_len = strlen(status_buffer);
+		while (status_len < columns) {
+			status_buffer[status_len++] = ' ';
 		}
+		status_buffer[status_len] = 0;
+
+		draw_screenline_diff(rows-1, status_buffer);
+
 		//go_bottom_and_clear_to_eol();
 		//write1(status_buffer);
 		if (have_status_msg) {
