@@ -20,8 +20,8 @@ Agon Vi is based on Busybox Vi.
 
 Dos (CRLF) or Unix (LF) line endings can be chosen with these commands:
 
-`:set ff=dos`
-`:set ff=unix`
+`:set fileformat=dos`
+`:set fileformat=unix`
 
 ## Vi for MOS older than v2.2
 

@@ -28,6 +28,8 @@
 //#define CONFIG_FEATURE_VI_UNDO_QUEUE_MAX 10
 #define ENABLE_FEATURE_VI_READONLY 0
 #define ENABLE_FEATURE_VI_ASK_TERMINAL 0
+#define ENABLE_FEATURE_VI_SETOPTS 1
+#define ENABLE_FEATURE_VI_SET 1
 #define IF_FEATURE_VI_ASK_TERMINAL(x) 0
 #define isbackspace(c) ((c) == 0x7f)
 //#define isbackspace(c) ((c) == term_orig.c_cc[VERASE] || (c) == 8 || (c) == 127)
@@ -117,7 +119,7 @@ static inline void goto_xy(int x, int y) {
 	putch(x);
 	putch(y);
 }
-static inline int system(const char *command)
+static inline int system(char *command)
 {
 	return mos_oscli(command, &command, 1);	
 }

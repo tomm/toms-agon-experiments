@@ -225,7 +225,6 @@ int optind = 1, opterr, optopt;
 #define CONFIG_FEATURE_VI_MAX_LEN 4096
 #define STRERROR_FMT    "%s"
 #define STRERROR_ERRNO
-typedef int smallint;
 
 // the CRASHME code is unmaintained, and doesn't currently build
 #define ENABLE_FEATURE_VI_CRASHME 0
@@ -340,13 +339,14 @@ typedef struct llist_t {
 
 	// the rest
 #if ENABLE_FEATURE_VI_SETOPTS
-	smallint vi_setops;     // set by setops()
+	int vi_setops;     // set by setops()
 #define VI_AUTOINDENT (1 << 0)
 #define VI_EXPANDTAB  (1 << 1)
 #define VI_ERR_METHOD (1 << 2)
 #define VI_IGNORECASE (1 << 3)
 #define VI_SHOWMATCH  (1 << 4)
 #define VI_TABSTOP    (1 << 5)
+#define VI_FILEFORMAT (1 << 6)
 #define autoindent (vi_setops & VI_AUTOINDENT)
 #define expandtab  (vi_setops & VI_EXPANDTAB )
 #define err_method (vi_setops & VI_ERR_METHOD) // indicate error with beep or flash
@@ -359,7 +359,8 @@ typedef struct llist_t {
 		"fl\0""flash\0" \
 		"ic\0""ignorecase\0" \
 		"sm\0""showmatch\0" \
-		"ts\0""tabstop\0"
+		"ts\0""tabstop\0" \
+		"ts\0""fileformat\0"
 #else
 #define autoindent (0)
 #define expandtab  (0)
@@ -368,7 +369,7 @@ typedef struct llist_t {
 #endif
 
 #if ENABLE_FEATURE_VI_READONLY
-	smallint readonly_mode;
+	int readonly_mode;
 #define SET_READONLY_FILE(flags)        ((flags) |= 0x01)
 #define SET_READONLY_MODE(flags)        ((flags) |= 0x02)
 #define UNSET_READONLY_FILE(flags)      ((flags) &= 0xfe)
@@ -379,9 +380,9 @@ typedef struct llist_t {
 #define UNSET_READONLY_FILE(flags)      ((void)0)
 #endif
 
-	smallint editing;        // >0 while we are editing a file
+	int editing;        // >0 while we are editing a file
 	                         // [code audit says "can be 0, 1 or 2 only"]
-	smallint cmd_mode;       // 0=command  1=insert 2=replace
+	int cmd_mode;       // 0=command  1=insert 2=replace
 	int modified_count;      // buffer contents changed if !0
 	int last_modified_count; // = -1;
 	int cmdline_filecnt;     // how many file names on cmd line
@@ -395,7 +396,7 @@ typedef struct llist_t {
 	int crow, ccol;          // cursor is on Crow x Ccol
 	int offset;              // chars scrolled off the screen to the left
 	int have_status_msg;     // is default edit status needed?
-	                         // [don't make smallint!]
+	                         // [don't make int!]
 	bool force_redraw_status_line;
 	char *current_filename;
 #if ENABLE_FEATURE_VI_COLON_EXPAND
@@ -404,9 +405,9 @@ typedef struct llist_t {
 	char *screenbegin;       // index into text[], of top line on the screen
 	char *screen;            // pointer to the virtual screen buffer
 	int screensize;          //            and its size
-#define tabstop 8
+	uint8_t tabstop;         // only 2,4,8 is valid!
 	int last_search_char;    // last char searched for (int because of Unicode)
-	smallint last_search_cmd;    // command used to invoke last char search
+	int last_search_cmd;    // command used to invoke last char search
 #if ENABLE_FEATURE_VI_CRASHME
 	char last_input_char;    // last char read from user
 #endif
@@ -415,7 +416,7 @@ typedef struct llist_t {
 #endif
 
 #if ENABLE_FEATURE_VI_DOT_CMD
-	smallint adding2q;	 // are we currently adding user input to q
+	int adding2q;	 // are we currently adding user input to q
 	int lmc_len;             // length of last_modifying_cmd
 	char *ioq, *ioq_start;   // pointer to string for get_one_char to "read"
 	int dotcnt;              // number of times to repeat '.' command
@@ -428,7 +429,7 @@ typedef struct llist_t {
 	int newindent;		// autoindent value for 'O'/'cc' commands
 						// or -1 to use indent from previous line
 #endif
-	smallint cmd_error;
+	int cmd_error;
 
 	// former statics
 #if ENABLE_FEATURE_VI_YANKMARK
@@ -450,7 +451,7 @@ typedef struct llist_t {
 #endif
 	//struct termios term_orig; // remember what the cooked mode was
 	int cindex;               // saved character index for up/down motion
-	smallint keep_index;      // retain saved character index
+	int keep_index;      // retain saved character index
 #if ENABLE_FEATURE_VI_COLON
 	llist_t *initial_cmds;
 #endif
@@ -533,7 +534,7 @@ static void show_help(void)
 	//redundant: usage text says this too: "\n\tReadonly with -R command line arg"
 #endif
 #if ENABLE_FEATURE_VI_SET
-	"\n\tSome colon mode commands with :"
+	"\n\tSome ex commands with :"
 #endif
 #if ENABLE_FEATURE_VI_SETOPTS
 	"\n\tSettable options with \":set\""
@@ -589,10 +590,22 @@ static char *asprintf(const char *format, ...)
 	return buf;
 }
 
-// like strchr() except that if c is not found in s, then it returns a pointer to the null byte at the end of s, rather than NULL
-char *strchrnul(const char *s, int c) {
-	const char *res = strchr(s, c);
-	return res ? res : s[strlen(s)];
+static char *skip_whitespace(char *s) {
+	for (;;) {
+		char c = *s;
+		if (c == ' ' || c == '\t' || c == '\n') s++;
+		else break;
+	}
+	return s;
+}
+
+static char *skip_non_whitespace(char *s) {
+	for (;;) {
+		char c = *s;
+		if (c != 0 && c != ' ' && c != '\t' && c != '\n') s++;
+		else break;
+	}
+	return s;
 }
 
 static inline bool file_exists(const char *filename) {
@@ -967,7 +980,9 @@ static char* format_line(char *src /*, int li*/)
 				if (c == '\t') {
 					c = ' ';
 					//      co %    8     !=     7
-					while ((co % tabstop) != (tabstop - 1)) {
+					// Note we avoid a modulo here (& (tabstop-1)), for performance
+					// reasons. This means only power of two tabstops work.
+					while ((co & (tabstop-1)) != (tabstop - 1)) {
 						dest[co++] = c;
 					}
 				} else {
@@ -2710,6 +2725,39 @@ static char *get_address(char *p, int *b, int *e, unsigned int *got)
 	return p;
 }
 
+static int index_in_strings(const char *strings, const char *key)
+{
+	int j, idx = 0;
+
+	while (*strings) {
+		/* Do we see "key\0" at current position in strings? */
+		for (j = 0; *strings == key[j]; ++j) {
+			if (*strings++ == '\0') {
+				//bb_error_msg("found:'%s' i:%u", key, idx);
+				return idx; /* yes */
+			}
+		}
+		/* No.  Move to the start of the next string. */
+		while (*strings++ != '\0')
+			continue;
+		idx++;
+	}
+	return -1;
+}
+
+static unsigned bb_strtou(const char *arg, char **endp, int base)
+{
+	unsigned long v;
+	char *endptr;
+
+	if (!endp) endp = &endptr;
+	*endp = (char*) arg;
+
+	if (!isalnum(arg[0])) return 0;//ret_ERANGE();
+	v = strtoul(arg, endp, base);
+	return v;
+}
+
 # if ENABLE_FEATURE_VI_SET && ENABLE_FEATURE_VI_SETOPTS
 static void setops(char *args, int flg_no)
 {
@@ -2736,7 +2784,23 @@ static void setops(char *args, int flg_no)
 		if (t <= 0 || t > MAX_TABSTOP)
 			goto bad;
 		tabstop = t;
+		need_buffer_redraw = true;
+		refresh(true);
 		return;
+	}
+	else if (index & VI_FILEFORMAT) {
+		if (!eq || flg_no)
+			goto bad;
+		if (strcmp(eq+1, "dos") == 0) {
+			is_crlf = true;
+			return;
+		} else if (strcmp(eq+1, "unix") == 0) {
+			is_crlf = false;
+			return;
+		} else {
+			status_line_bold("Valid arguments: dos, unix");
+			return;
+		}
 	}
 	if (eq)	goto bad; // boolean option has "="?
 	if (flg_no) {
@@ -3101,7 +3165,7 @@ static void colon(char *buf)
 			// user wants file status info
 			force_redraw_status_line = true;
 		}
-	} else if (strncmp(cmd, "features", i) == 0) {	// what features are available
+	} else if (strncmp(cmd, "features", i) == 0 || strncmp(cmd, "help", i) == 0) {	// what features are available
 		// print out values of all features
 		go_bottom_and_clear_to_eol();
 		cookmode();
@@ -3225,14 +3289,6 @@ static void colon(char *buf)
 			optind = -1; // start from 0th file
 			editing = 0;
 		}
-	} else if (strncmp(cmd, "set", i) == 0) {	// set or clear features
-		if (strcmp(args, "ff=dos") == 0) {
-			is_crlf = true;
-		} else if (strcmp(args, "ff=unix") == 0) {
-			is_crlf = false;
-		} else {
-			status_line_bold("Valid arguments: set ff=dos, set ff=unix");
-		}
 # if ENABLE_FEATURE_VI_SET
 	} else if (strncmp(cmd, "set", i) == 0) {	// set or clear features
 #  if ENABLE_FEATURE_VI_SETOPTS
@@ -3248,13 +3304,15 @@ static void colon(char *buf)
 				"%sflash "
 				"%signorecase "
 				"%sshowmatch "
-				"tabstop=%u",
+				"tabstop=%u "
+				"fileformat=%s ",
 				autoindent ? "" : "no",
 				expandtab ? "" : "no",
 				err_method ? "" : "no",
 				ignorecase ? "" : "no",
 				showmatch ? "" : "no",
-				tabstop
+				tabstop,
+				is_crlf ? "dos" : "unix"
 			);
 #  endif
 			goto ret;
@@ -5042,6 +5100,7 @@ int main(int argc, char **argv)
 	/* "" but has space for 2 chars: */
 	last_search_pattern = xzalloc(2);
 	//IF_FEATURE_VI_SETOPTS(newindent--;)
+	tabstop = 8;
 
 #if ENABLE_FEATURE_VI_UNDO
 	//undo_stack_tail = NULL; - already is
@@ -5061,8 +5120,8 @@ int main(int argc, char **argv)
 	}
 #endif
 
-	// 0: all of our options are disabled by default in vim
-	//vi_setops = 0;
+	// Enable AUTOINDENT by default
+	vi_setops = VI_AUTOINDENT;
 	//opts = getopt32(argv, VI_OPTSTR IF_FEATURE_VI_COLON(, &initial_cmds));
 	int num_initial_cmds = 0;
 	for (int i=1; i<argc; i++) {
