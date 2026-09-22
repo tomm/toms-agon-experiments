@@ -2378,6 +2378,12 @@ static int init_text_buffer(char *fn)
 {
 	int rc;
 
+	/* remember what line we were on in old buffer */
+	if (text) {
+		int cur = count_lines(text, dot);
+		platform_store_session_ycursor_pos(current_filename, cur);
+	}
+
 	// allocate/reallocate text buffer
 	free(text);
 	text_size = 10240;
@@ -2397,6 +2403,15 @@ static int init_text_buffer(char *fn)
 	// init the marks
 	memset(mark, 0, sizeof(mark));
 #endif
+	// Load cursor y pos from session if available
+	{
+		int ycurs = platform_lookup_session_ycursor_pos(fn);
+		if (ycurs) {
+			dot = find_line(ycurs);
+			dot_skip_over_ws();
+		}
+	}
+
 	return rc;
 }
 
@@ -5066,6 +5081,12 @@ static void edit_file(char *fn)
 	go_bottom_and_clear_to_eol();
 	cookmode();
 #undef cur_line
+
+	/* remember what line we were on */
+	{
+		int cur = count_lines(text, dot);
+		platform_store_session_ycursor_pos(fn, cur);
+	}
 }
 
 // XXX whaa?
