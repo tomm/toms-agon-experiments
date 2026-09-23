@@ -39,6 +39,7 @@ static bool need_buffer_redraw;
 #define xzalloc(s) calloc(s,1)
 #define ARRAY_SIZE(x) ((unsigned)(sizeof(x) / sizeof((x)[0])))
 #define ALIGN1
+#define CTRL(k) ((k)-96)
 
 //config:config VI
 //config:	bool "vi (23 kb)"
@@ -2957,21 +2958,19 @@ static char *regex_search(char *q, regex_t *preg, const char *Rorig,
 #endif /* ENABLE_FEATURE_VI_REGEX_SEARCH */
 
 #ifdef ENABLE_FEATURE_VI_FUZZYFINDER
-/* Basically just a case-insensitive strstr, but also ignores .bin files */
+/* Matches haystacks containing needle characters, in order by not 
+ * necessarily sequential. Filters out haystacks ending in ".bin".
+ */
 static bool fuzzy_match(const char *haystack, const char *needle)
 {
 	int len = strlen(haystack);
 	if (len >= 4 && strcmp(&haystack[len-4], ".bin")==0) return false;
-	while (*haystack) {
-		const char *hp = haystack;
-		const char *np = needle;
-		while (*np && *hp && toupper(*np) == toupper(*hp)) {
-			np++; hp++;
+	for (;*haystack; haystack++) {
+		if (toupper(*haystack) == toupper(*needle)) {
+			needle++;
 		}
-		if (*np == 0) return true;
-		haystack++;
 	}
-	return false;
+	return *needle == 0;
 }
 
 static void open_fuzzy_filepicker(const char *dirname)
@@ -3023,9 +3022,9 @@ static void open_fuzzy_filepicker(const char *dirname)
 			break;
 		} else if (isbackspace(c)) {
 			if (len>0) term[len-1] = 0;
-		} else if (c == KEYCODE_UP && selected > 0) {
+		} else if ((c == KEYCODE_UP || (c == CTRL('p'))) && selected > 0) {
 			selected--;
-		} else if (c == KEYCODE_DOWN) {
+		} else if (c == KEYCODE_DOWN || c == CTRL('n')) {
 			selected++;
 		} else if (c >= ' ') {
 			term[len++] = c;
