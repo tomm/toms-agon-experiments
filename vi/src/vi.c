@@ -266,14 +266,12 @@ enum {
 // http://invisible-island.net/xterm/ctlseqs/ctlseqs.html
 #define ESC "\033"
 // Inverse/Normal text
-#define ESC_BOLD_TEXT ""
-#define ESC_NORM_TEXT ""
+#define ESC_BOLD_TEXT ""/*"\x11\x82"*/
+#define ESC_NORM_TEXT ""/*"\x11\x80"*/
 // Bell
 #define ESC_BELL "\007"
 // <num> is 0/1/2 = "erase below/above/all".)
 #define ESC_CLEAR2EOS          "\xc"
-// Cursor to given coordinate (1,1: top left)
-#define ESC_SET_CURSOR_POS     "\x1f%c%c"
 #define ESC_SET_CURSOR_TOPLEFT "\x1e"
 //UNUSED
 //// Cursor up and down
@@ -519,6 +517,9 @@ static void status_line_bold(const char *, ...);
 static void show_help(void)
 {
 	puts("These features are available:"
+#if ENABLE_FEATURE_VI_FUZZYFINDER
+	"\n\tFuzzy find with CTRL-P and :fzf <dir>"
+#endif
 #if ENABLE_FEATURE_VI_SEARCH
 	"\n\tPattern searches with / and ?"
 #endif
@@ -606,6 +607,20 @@ static char *skip_non_whitespace(char *s) {
 		else break;
 	}
 	return s;
+}
+
+/** Caller must free() return */
+char* concat_path_file(const char *path, const char *filename)
+{
+	int pathlen;
+	if (!path || !(pathlen = strlen(path)) || (strcmp(path, ".")==0)) {
+		return strdup(filename);
+	}
+	const size_t out_len = pathlen + strlen(filename) + 2;
+	char *out = malloc(out_len);
+	const char *format = path[pathlen-1] == '/' ? "%s%s" : "%s/%s";
+	snprintf(out, out_len, format, path, filename);
+	return out;
 }
 
 static inline bool file_exists(const char *filename) {
@@ -1297,7 +1312,7 @@ static void format_edit_status(void)
 	trunc_at = columns < STATUS_BUFFER_LEN-1 ?
 		columns : STATUS_BUFFER_LEN-1;
 
-	trunc_at = trunc_at >= get_scr_cols() ? get_scr_cols() : trunc_at;
+	trunc_at = trunc_at >= platform_get_columns() ? platform_get_columns() : trunc_at;
 
 	ret = snprintf(status_buffer, trunc_at+1,
 #if ENABLE_FEATURE_VI_READONLY
@@ -1317,27 +1332,34 @@ static void format_edit_status(void)
 #undef tot
 }
 
+/**
+ * Note - does not null terminate.
+ */
 static void space_pad_to(char *buf, int len)
 {
 		int end = strlen(buf);
 		while (end < len) {
-			status_buffer[end++] = ' ';
+			buf[end++] = ' ';
 		}
-		status_buffer[end] = 0;
 }
 
 static void show_status_line(void)
 {
 	if (have_status_msg) {
+		const int len = strlen(status_buffer);
 		// special message
 		goto_xy(0, rows - 1);
-		space_pad_to(status_buffer, columns-1);
-
 		platform_text_highlight();
-		write1(status_buffer);
+		if (len <= columns) {
+			// can use fast diff update if fits in one line
+			space_pad_to(status_buffer, columns);
+			draw_screenline_diff(rows-1, status_buffer);
+		} else {
+			write1(status_buffer);
+		}
 		platform_text_normal();
 
-		if (((int)strlen(status_buffer) - (have_status_msg - 1)) >
+		if ((len - (have_status_msg - 1)) >
 				(columns - 1) ) {
 			have_status_msg = 0;
 			Hit_Return();
@@ -2934,6 +2956,116 @@ static char *regex_search(char *q, regex_t *preg, const char *Rorig,
 # define strchr_backslash(s, c) strchr(s, c)
 #endif /* ENABLE_FEATURE_VI_REGEX_SEARCH */
 
+#ifdef ENABLE_FEATURE_VI_FUZZYFINDER
+/* Basically just a case-insensitive strstr, but also ignores .bin files */
+static bool fuzzy_match(const char *haystack, const char *needle)
+{
+	int len = strlen(haystack);
+	if (len >= 4 && strcmp(&haystack[len-4], ".bin")==0) return false;
+	while (*haystack) {
+		const char *hp = haystack;
+		const char *np = needle;
+		while (*np && *hp && toupper(*np) == toupper(*hp)) {
+			np++; hp++;
+		}
+		if (*np == 0) return true;
+		haystack++;
+	}
+	return false;
+}
+
+static void open_fuzzy_filepicker(const char *dirname)
+{
+	char term[32];
+	char *rowbuf;
+	uint8_t selected = 0;
+	term[0] = 0;
+
+	rowbuf = malloc(columns);
+	memset(rowbuf, ' ', columns);
+	draw_screenline_diff(1, rowbuf);
+
+	for(;;) {
+		DIR *d = opendir(dirname);
+		if (d) {
+			struct dirent *de;
+			uint8_t i=0;
+			while ((i < rows-3) && (de = readdir(d))) {
+				goto_xy(0,i+2);
+				if (!(de->d_type & DT_REG)) continue;
+				if (fuzzy_match(de->d_name, term)) {
+					uint8_t len = strlen(de->d_name);
+					snprintf(rowbuf, columns, "%s %s", i==selected ? "->" : "  ", de->d_name);
+					space_pad_to(rowbuf, columns);
+					draw_screenline_diff(i+2, rowbuf);
+					i++;
+				}
+			}
+			closedir(d);
+			// options were eliminated so move selection cursor back
+			if (selected >= i) selected = 0;
+			// wipe remaining unused lines
+			memset(rowbuf, ' ', columns);
+			while (i<rows-3) {
+					draw_screenline_diff(i+2, rowbuf);
+					i++;
+			}
+		}
+
+		snprintf(rowbuf, columns, "Find file> %s", term);
+		space_pad_to(rowbuf, columns);
+		draw_screenline_diff(0, rowbuf);
+		uint8_t len = strlen(term);
+		goto_xy(11 + len, 0);
+
+		int c = get_one_char();
+		if (c == 27 /* escape */) {
+			break;
+		} else if (isbackspace(c)) {
+			if (len>0) term[len-1] = 0;
+		} else if (c == KEYCODE_UP && selected > 0) {
+			selected--;
+		} else if (c == KEYCODE_DOWN) {
+			selected++;
+		} else if (c >= ' ') {
+			term[len++] = c;
+			term[len] = 0;
+		} else if (c == '\r') {
+			// don't edit, if the current file has been modified
+			if (modified_count) {
+				need_buffer_redraw = true;
+				redraw(FALSE);		// force redraw all
+				status_line_bold("No write since last change");
+				free(rowbuf);
+				return;
+			}
+			// pick first item in fuzzy list
+			DIR *d = opendir(dirname);
+			if (d) {
+				struct dirent *de;
+				for (uint8_t i=0; (de = readdir(d));) {
+					if (!(de->d_type & DT_REG)) continue;
+					if (fuzzy_match(de->d_name, term)) {
+						if (selected == i) {
+							char *full = concat_path_file(dirname, de->d_name);
+							init_text_buffer(full);
+							free(full);
+							goto cleanup;
+						}
+						i++;
+					}
+				}
+			}
+			closedir(d);
+		}
+	}
+cleanup:
+	need_buffer_redraw = true;
+	redraw(FALSE);		// force redraw all
+	free(rowbuf);
+}
+#endif /* ENABLE_FEATURE_VI_FUZZYFINDER */
+
 // buf must be no longer than MAX_INPUT_LEN!
 static void colon(char *buf)
 {
@@ -3122,6 +3254,12 @@ static void colon(char *buf)
 		}
 		dot = yank_delete(q, r, WHOLE, YANKDEL, ALLOW_UNDO);	// save, then delete lines
 		dot_skip_over_ws();
+	} else if (strncmp(cmd, "fzf", i) == 0) {
+		if (args[0]) {
+			open_fuzzy_filepicker(args);
+		} else {
+			open_fuzzy_filepicker(".");
+		}
 	} else if (strncmp(cmd, "edit", i) == 0) {	// Edit a file
 		int size;
 
@@ -3903,7 +4041,11 @@ static void do_cmd(int c)
 		//case 0x0b:	// vt
 		//case 0x0e:	// so
 		//case 0x0f:	// si
-		//case 0x10:	// dle
+#ifdef ENABLE_FEATURE_VI_FUZZYFINDER
+		case 0x10:	// ctrl-p
+				open_fuzzy_filepicker(".");
+				break;
+#endif /* ENABLE_FEATURE_VI_FUZZYFINDER */
 		//case 0x11:	// dc1
 		//case 0x13:	// dc3
 #if ENABLE_FEATURE_VI_CRASHME
@@ -4960,8 +5102,8 @@ static void edit_file(char *fn)
 
 	editing = 1;	// 0 = exit, 1 = one file, 2 = multiple files
 	rawmode();
-	rows = get_scr_rows();
-	columns = get_scr_cols();
+	rows = platform_get_rows();
+	columns = platform_get_columns();
 	// XXX TODO IF_FEATURE_VI_ASK_TERMINAL(G.get_rowcol_error =) query_screen_dimensions();
 #if ENABLE_FEATURE_VI_ASK_TERMINAL
 	if (G.get_rowcol_error /* TODO? && no input on stdin */) {
