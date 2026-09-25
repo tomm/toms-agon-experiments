@@ -23,7 +23,8 @@ Dos (CRLF) or Unix (LF) line endings can be chosen with these commands:
 `:set fileformat=dos`
 `:set fileformat=unix`
 
-## Vi for MOS older than v2.2
+Search for the word under the cursor with '*' (or '#' for backwards).
 
-An old moslet binary of vi is available [here](./bin/vi-obsolete-moslet.bin). It should
-be placed in your sdcard's /mos/ directory. This binary is not for MOS 2.2+
+A fuzzy file finder can be opened with CTRL-P, or `:fzf <dir>`
+
+`:help` is a synonym of `:features`.

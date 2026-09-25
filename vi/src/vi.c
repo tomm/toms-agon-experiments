@@ -3944,6 +3944,40 @@ static int find_range(char **start, char **stop, int cmd)
 	return buftype;
 }
 
+/* 
+ * Copy identifier under the cursor. Cursor can be placed anywhere in the
+ * identifier, so we must track back and forward to find it.
+ * Caller must free the result
+ */
+static char *alloc_search_pattern_from_identifier_under_cursor(void)
+{
+	const char *id_begin = dot;
+	const char *id_end = dot;
+	char *id;
+
+	while (id_begin > text) {
+		const char prev = *(id_begin-1);
+		// identifier loose: [0-9A-Za-z_]+
+		if (isalnum(prev) || prev == '_') id_begin--;
+		else break;
+	}
+
+	while (id_end < end) {
+		const char next = *id_end;
+		if (isalnum(next) || next == '_') id_end++;
+		else break;
+	}
+
+	if (id_begin == id_end) return 0;
+
+	// 1 for null byte, 1 for search direction prefix
+	id = malloc(2 + id_end-id_begin);
+	id[0] = '/';
+	id[1] = 0;
+	strncat(id+1, id_begin, id_end-id_begin);
+	return id;
+}
+
 //---------------------------------------------------------------------
 //----- the Ascii Chart -----------------------------------------------
 //  00 nul   01 soh   02 stx   03 etx   04 eot   05 enq   06 ack   07 bel
@@ -4316,6 +4350,14 @@ static void do_cmd(int c)
 		break;
 #endif
 #if ENABLE_FEATURE_VI_SEARCH
+	case '*':
+	case '#':
+		if (last_search_pattern) free(last_search_pattern);
+		last_search_pattern = alloc_search_pattern_from_identifier_under_cursor();
+		if (!last_search_pattern) break;
+		// Search direction
+		last_search_pattern[0] = c == '*' ? '/' : '?';
+		goto search_next;
 	case 'N':			// N- backward search for last pattern
 		dir = last_search_pattern[0] == '/' ? BACK : FORWARD;
 		goto dc4;		// now search for pattern
@@ -4336,6 +4378,7 @@ static void do_cmd(int c)
 		}
 		// fall through
 	case 'n':			// n- repeat search for last pattern
+search_next:
 		// search rest of text[] starting at next char
 		// if search fails "dot" is unchanged
 		dir = last_search_pattern[0] == '/' ? FORWARD : BACK;
