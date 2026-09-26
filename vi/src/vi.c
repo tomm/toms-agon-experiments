@@ -512,6 +512,12 @@ typedef struct llist_t {
 static int crashme = 0;
 #endif
 
+#if ENABLE_FEATURE_VI_FILESTACK
+#define FILESTACK_LEN 8
+static char *g_filestack[8];
+static uint8_t g_filestack_pos = 0;
+#endif /* ENABLE_FEATURE_VI_FILESTACK */
+
 static void show_status_line(void);	// put a message on the bottom line
 static void status_line_bold(const char *, ...);
 
@@ -520,6 +526,9 @@ static void show_help(void)
 	puts("These features are available:"
 #if ENABLE_FEATURE_VI_FUZZYFINDER
 	"\n\tFuzzy find with CTRL-P and :fzf <dir>"
+#endif
+#if ENABLE_FEATURE_VI_FILESTACK
+	"\n\tJump list (CTRL-O, CTRL-I)"
 #endif
 #if ENABLE_FEATURE_VI_SEARCH
 	"\n\tPattern searches with / and ?"
@@ -591,6 +600,40 @@ static char *asprintf(const char *format, ...)
 
 	return buf;
 }
+
+#if ENABLE_FEATURE_VI_FILESTACK
+static void filestack_push(const char *filename)
+{
+	g_filestack_pos = (g_filestack_pos+1) & (FILESTACK_LEN-1);
+	if (g_filestack[g_filestack_pos]) free(g_filestack[g_filestack_pos]);
+	g_filestack[g_filestack_pos] = strdup(filename);
+
+	// clear space ahead so no stack wraparound
+	uint8_t next = (g_filestack_pos+1) & (FILESTACK_LEN-1);
+	if (g_filestack[next]) {
+		free(g_filestack[next]);
+		g_filestack[next] = NULL;
+	}
+}
+static char *filestack_prev(void)
+{
+	uint8_t newpos = (g_filestack_pos-1) & (FILESTACK_LEN-1);
+	char *out = g_filestack[newpos];
+	if (out) {
+		g_filestack_pos = newpos;
+	}
+	return out;
+}
+static char *filestack_next(void)
+{
+	uint8_t newpos = (g_filestack_pos+1) & (FILESTACK_LEN-1);
+	char *out = g_filestack[newpos];
+	if (out) {
+		g_filestack_pos = newpos;
+	}
+	return out;
+}
+#endif /* ENABLE_FEATURE_VI_FILESTACK */
 
 static char *skip_whitespace(char *s) {
 	for (;;) {
@@ -1346,6 +1389,13 @@ static void space_pad_to(char *buf, int len)
 
 static void show_status_line(void)
 {
+	if (force_redraw_status_line) {
+		// Clear last line of screen buffer, as it's been stomped.
+		// This is cause a status line redraw
+		memset(&screen[(rows-1) * columns], 0, columns);
+		force_redraw_status_line = false;
+	}
+
 	if (have_status_msg) {
 		const int len = strlen(status_buffer);
 		// special message
@@ -1371,13 +1421,6 @@ static void show_status_line(void)
 		// default status message
 		format_edit_status();
 	
-		if (force_redraw_status_line) {
-			// Clear last line of screen buffer, as it's been stomped.
-			// This is cause a status line redraw
-			memset(&screen[(rows-1) * columns], 0, columns);
-			force_redraw_status_line = false;
-		}
-
 		// draw_screenline_diff requires status_buffer to extend (space-padded) to all columns
 		int status_len = strlen(status_buffer);
 		space_pad_to(status_buffer, columns);
@@ -2404,7 +2447,10 @@ static int init_text_buffer(char *fn)
 	/* remember what line we were on in old buffer */
 	if (text) {
 		int cur = count_lines(text, dot);
-		platform_store_session_ycursor_pos(current_filename, cur);
+
+		if (current_filename) {
+			platform_store_session_ycursor_pos(current_filename, cur);
+		}
 	}
 
 	// allocate/reallocate text buffer
@@ -3048,6 +3094,9 @@ static void open_fuzzy_filepicker(const char *dirname)
 					if (fuzzy_match(de->d_name, term)) {
 						if (selected == i) {
 							char *full = concat_path_file(dirname, de->d_name);
+#if ENABLE_FEATURE_VI_FILESTACK
+							filestack_push(full);
+#endif /* ENABLE_FEATURE_VI_FILESTACK */
 							init_text_buffer(full);
 							free(full);
 							goto cleanup;
@@ -3279,6 +3328,9 @@ static void colon(char *buf)
 			goto ret;
 		}
 
+#if ENABLE_FEATURE_VI_FILESTACK
+		filestack_push(fn);
+#endif /* ENABLE_FEATURE_VI_FILESTACK */
 		size = init_text_buffer(fn);
 
 # if ENABLE_FEATURE_VI_YANKMARK
@@ -4159,11 +4211,22 @@ static void do_cmd(int c)
 
  key_cmd_mode:
 	switch (c) {
-		//case 0x01:	// soh
-		//case 0x09:	// ht
-		//case 0x0b:	// vt
-		//case 0x0e:	// so
-		//case 0x0f:	// si
+#if ENABLE_FEATURE_VI_FILESTACK
+		case 0x09:   // ctrl-i
+		case 0x0f: { // ctrl-o
+			if (modified_count) {
+				status_line_bold("No write since last change");
+				break;
+			}
+			char *filename = c == 9 ? filestack_next() : filestack_prev();
+			if (filename) {
+				init_text_buffer(filename);
+				need_buffer_redraw = true;
+				redraw(FALSE);
+			}
+			break;
+		}
+#endif /* ENABLE_FEATURE_VI_FILESTACK */
 #ifdef ENABLE_FEATURE_VI_FUZZYFINDER
 		case 0x10:	// ctrl-p
 				open_fuzzy_filepicker(".");
@@ -5255,6 +5318,9 @@ static void edit_file(char *fn)
 	}
 #endif
 	new_screen(rows, columns);	// get memory for virtual screen
+#if ENABLE_FEATURE_VI_FILESTACK
+	if (fn) filestack_push(fn);
+#endif /* ENABLE_FEATURE_VI_FILESTACK */
 	init_text_buffer(fn);
 
 #if ENABLE_FEATURE_VI_YANKMARK
