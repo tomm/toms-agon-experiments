@@ -18,6 +18,8 @@ Agon Vi is based on Busybox Vi.
 
 ## New features of Agon Vi
 
+Text object actions (ciw, da{, etc).
+
 Dos (CRLF) or Unix (LF) line endings can be chosen with these commands:
 
 `:set fileformat=dos`

@@ -3833,6 +3833,40 @@ static void int_handler(int sig)
 }
 #endif /* FEATURE_VI_USE_SIGNALS */
 
+typedef bool (*textobj_pred_fn)(char);
+// identifier loose: [0-9A-Za-z_]+
+static bool textobj_pred_identifier(char c) {
+		return (isalnum(c) || c == '_');
+}
+static bool textobj_pred_notspace(char c) {
+	return !isspace(c);
+}
+static char g_pred_delim;
+static bool textobj_pred_delim(char c) {
+	return c != '\n' && c != g_pred_delim;
+}
+
+static void measure_text_object(char *start, textobj_pred_fn cond, char **out_begin, char **out_end)
+{
+	char *obj_begin = start;
+	char *obj_end = start;
+
+	while (obj_begin > text) {
+		const char prev = *(obj_begin-1);
+		if (cond(prev)) obj_begin--;
+		else break;
+	}
+
+	while (obj_end < end) {
+		const char next = *obj_end;
+		if (cond(next)) obj_end++;
+		else break;
+	}
+
+	*out_begin = obj_begin;
+	*out_end = obj_end;
+}
+
 static void do_cmd(int c);
 
 static int at_eof(const char *s)
@@ -3901,6 +3935,74 @@ static int find_range(char **start, char **stop, int cmd)
 		do_cmd(c);		// execute movement cmd
 		if (cmd_error)
 			buftype = -1;
+#if ENABLE_FEATURE_VI_TEXTOBJS
+	} else if (c == 'i' || c == 'a') {
+		// ie diw, ci", da{ etc
+		char objtype = get_one_char();
+		switch (objtype) {
+			// TODO handle c=='a' properly for 'w' and 'W' case...
+			case 'w':
+				measure_text_object(dot, &textobj_pred_identifier, &p, &q);
+				break;
+			case 'W':
+				measure_text_object(dot, &textobj_pred_notspace, &p, &q);
+				break;
+			case '"':
+			case '\'':
+			case '`':
+				g_pred_delim = objtype;
+				measure_text_object(dot, &textobj_pred_delim, &p, &q);
+				if (p == text || *(p-1) != objtype || *q != objtype) p=q; // no find
+				else if (c == 'a') {
+					p--;
+					q++;
+				}
+				break;
+			case ')':
+				objtype = '(';
+				goto brackets;
+			case ']':
+				objtype = '[';
+				goto brackets;
+			case '}':
+				objtype = '{';
+				goto brackets;
+			case '(':
+			case '[':
+			case '{':
+brackets:
+				for (;p != text; p--) {
+					if (*p == objtype) break;
+				}
+				if (*p == objtype) {
+					q = find_pair(p, objtype);
+					if (q == NULL) p = NULL; // no find
+					else {
+						// p is on starting bracket, q is on ending bracket
+						if (c == 'a') {
+							q++;
+						} else {
+							p++; // skip over starting bracket
+						}
+					}
+				} else {
+					p=q; // no find
+				}
+				break;
+				/*
+			case 'p':
+				do_cmd('{');
+				p = dot > text && dot < end-2 ? dot+1 : dot;
+				do_cmd('}');
+				q = dot > text ? dot-1 : dot;
+				break;
+				*/
+		}
+		if (p!=q) {
+			dot=q-1;
+			buftype = MULTI;
+		}
+#endif /* ENABLE_FEATURE_VI_TEXTOBJS */
 	} else if (c == ' ' || c == 'l') {
 		// forward motion by character
 		int tmpcnt = (cmdcnt ?: 1);
@@ -3952,22 +4054,9 @@ static int find_range(char **start, char **stop, int cmd)
  */
 static char *alloc_search_pattern_from_identifier_under_cursor(void)
 {
-	const char *id_begin = dot;
-	const char *id_end = dot;
-	char *id;
+	char *id_begin, *id_end, *id;
 
-	while (id_begin > text) {
-		const char prev = *(id_begin-1);
-		// identifier loose: [0-9A-Za-z_]+
-		if (isalnum(prev) || prev == '_') id_begin--;
-		else break;
-	}
-
-	while (id_end < end) {
-		const char next = *id_end;
-		if (isalnum(next) || next == '_') id_end++;
-		else break;
-	}
+	measure_text_object(dot, &textobj_pred_identifier, &id_begin, &id_end);
 
 	if (id_begin == id_end) return 0;
 
