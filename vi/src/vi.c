@@ -3897,6 +3897,9 @@ static char g_pred_delim;
 static bool textobj_pred_delim(char c) {
 	return c != '\n' && c != g_pred_delim;
 }
+static bool textobj_pred_filename(char c) {
+	return !isspace(c) && c != '"' && c != '\'';
+}
 
 static void measure_text_object(char *start, textobj_pred_fn cond, char **out_begin, char **out_end)
 {
@@ -4679,7 +4682,29 @@ search_next:
 		break;
 	case 'g': // 'gg' goto a line number (vim) (default: very first line)
 		c1 = get_one_char();
-		if (c1 != 'g') {
+		if (c1 == 'f') {
+			if (modified_count) {
+				need_buffer_redraw = true;
+				redraw(FALSE);		// force redraw all
+				status_line_bold("No write since last change");
+				break;
+			}
+			char *obj_begin, *obj_end;
+			// goto filename under cursor
+			measure_text_object(dot, textobj_pred_filename, &obj_begin, &obj_end);
+			if (obj_begin != obj_end) {
+				// found
+				char *filename = strndup(obj_begin, obj_end-obj_begin);
+				if (file_exists(filename)) {
+#if ENABLE_FEATURE_VI_FILESTACK
+					filestack_push(filename);
+#endif /* ENABLE_FEATURE_VI_FILESTACK */
+					init_text_buffer(filename);
+				}
+				free(filename);
+			}
+			break;
+		} else if (c1 != 'g') {
 			buf[0] = 'g';
 			// c1 < 0 if the key was special. Try "g<up-arrow>"
 			// TODO: if Unicode?
